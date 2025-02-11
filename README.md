@@ -22,15 +22,23 @@
 -   **Result Output:**  
     The results are displayed in a new unsaved document with a concise summary (used as the tab title) and a detailed header that shows each step of the chain.
 
-## Installation
+## Installation options
 
-### 1. Use my built package
+### 1. Install from Extensions Marketplace
+
+#### Steps
+
+1. **Search for "chain-grep" in Extensions Marketplace**
+1. **Click "Install" button**
+
+### 2. Use my built package
 
 #### Prerequisites
 
 -   [Visual Studio Code](https://code.visualstudio.com/)
 
 #### Steps
+
 1. **Download `.vsix` file which you can find in Releases tab**
 2. **Install in VS Code:**
 
@@ -39,7 +47,7 @@
 -   Run **Extensions: Install from VSIX...** and select the generated `.vsix` file.
 -   Reload or restart VS Code if necessary.
 
-### 2. Or build it yourself
+### 3. Or build it yourself
 
 #### Prerequisites
 
@@ -133,4 +141,4 @@ Feel free to fork the repository and open a pull request.
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+This project is licensed under the [MIT License](https://mit-license.org/).
