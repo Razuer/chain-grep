@@ -24,7 +24,7 @@
 
 ## Installation
 
-### 2. Use my built package
+### 1. Use my built package
 
 #### Prerequisites
 
