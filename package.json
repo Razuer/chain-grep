@@ -1,0 +1,67 @@
+{
+    "publisher": "rejzerek",
+    "name": "chain-grep",
+    "displayName": "Chain Grep",
+    "description": "Chain Grep is a Visual Studio Code extension that lets you perform sequential (chained) text searches and regular expression filters on a file. It allows you to build a series of grep operations where each step further refines the previous result. Additionally, you can refresh the entire chain, so when the source file is updated, all your filtering steps are reapplied automatically.",
+    "version": "0.0.1",
+    "engines": {
+        "vscode": "^1.97.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "activationEvents": [],
+    "main": "./dist/extension.js",
+    "contributes": {
+        "commands": [
+            {
+                "command": "chainGrep.findText",
+                "title": "Chain Grep: Find Text"
+            },
+            {
+                "command": "chainGrep.findRegex",
+                "title": "Chain Grep: Find Regex"
+            },
+            {
+                "command": "chainGrep.grepSelection",
+                "title": "Chain Grep: Grep Selection"
+            },
+            {
+                "command": "chainGrep.refresh",
+                "title": "Chain Grep: Refresh"
+            }
+        ],
+        "keybindings": [
+            {
+                "command": "chainGrep.grepSelection",
+                "key": "ctrl+alt+g",
+                "when": "editorTextFocus"
+            }
+        ]
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run package",
+        "compile": "webpack",
+        "watch": "webpack --watch",
+        "package": "webpack --mode production --devtool hidden-source-map",
+        "compile-tests": "tsc -p . --outDir out",
+        "watch-tests": "tsc -p . -w --outDir out",
+        "pretest": "npm run compile-tests && npm run compile && npm run lint",
+        "lint": "eslint src",
+        "test": "vscode-test"
+    },
+    "devDependencies": {
+        "@types/vscode": "^1.97.0",
+        "@types/mocha": "^10.0.10",
+        "@types/node": "20.x",
+        "@typescript-eslint/eslint-plugin": "^8.22.0",
+        "@typescript-eslint/parser": "^8.22.0",
+        "eslint": "^9.19.0",
+        "typescript": "^5.7.3",
+        "ts-loader": "^9.5.2",
+        "webpack": "^5.97.1",
+        "webpack-cli": "^6.0.1",
+        "@vscode/test-cli": "^0.0.10",
+        "@vscode/test-electron": "^2.4.1"
+    }
+}
