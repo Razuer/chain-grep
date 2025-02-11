@@ -24,7 +24,22 @@
 
 ## Installation
 
-### 1. Build it yourself
+### 2. Use my built package
+
+#### Prerequisites
+
+-   [Visual Studio Code](https://code.visualstudio.com/)
+
+#### Steps
+1. **Download `.vsix` file which you can find in Releases tab**
+2. **Install in VS Code:**
+
+-   Open VS Code.
+-   Open the Command Palette (`Ctrl+Shift+P`).
+-   Run **Extensions: Install from VSIX...** and select the generated `.vsix` file.
+-   Reload or restart VS Code if necessary.
+
+### 2. Or build it yourself
 
 #### Prerequisites
 
@@ -73,15 +88,6 @@
     - Run **Extensions: Install from VSIX...** and select the generated `.vsix` file.
     - Reload or restart VS Code if necessary.
 
-### 2. Or just use my built package.
-
-**Install in VS Code:**
-
--   Open VS Code.
--   Open the Command Palette (`Ctrl+Shift+P`).
--   Run **Extensions: Install from VSIX...** and select the generated `.vsix` file.
--   Reload or restart VS Code if necessary.
-
 ## Usage
 
 ### Commands
@@ -128,7 +134,3 @@ Feel free to fork the repository and open a pull request.
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
-
----
-
-This README provides an overview of the extension, installation and usage instructions, keybindings, and contribution guidelines. Adjust the repository URL and any other project-specific details as needed.
