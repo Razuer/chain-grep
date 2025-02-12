@@ -2,7 +2,7 @@
     "publisher": "rejzerek",
     "name": "chain-grep",
     "displayName": "Chain Grep",
-    "description": "Chain Grep enables chained text and regex searches in VS Code — refine your results step by step and refresh the entire chain when the source updates.",
+    "description": "Chain Grep enables chained text, regex searches and text highlighting in VS Code — refine your results step by step and refresh the entire chain when the source updates.",
     "icon": "icon.png",
     "version": "0.0.4",
     "engines": {
