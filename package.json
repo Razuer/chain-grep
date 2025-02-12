@@ -4,7 +4,7 @@
     "displayName": "Chain Grep",
     "description": "Chain Grep enables chained text and regex searches in VS Code — refine your results step by step and refresh the entire chain when the source updates.",
     "icon": "icon.png",
-    "version": "0.0.3",
+    "version": "0.0.4",
     "engines": {
         "vscode": "^1.85.2"
     },
@@ -34,12 +34,25 @@
             {
                 "command": "chainGrep.refresh",
                 "title": "Chain Grep: Refresh"
+            },
+            {
+                "command": "chainGrep.toggleHighlight",
+                "title": "Chain Grep: Toggle Highlight"
+            },
+            {
+                "command": "chainGrep.clearHighlights",
+                "title": "Chain Grep: Clear Highlights"
             }
         ],
         "keybindings": [
             {
                 "command": "chainGrep.grepSelection",
                 "key": "ctrl+alt+g",
+                "when": "editorTextFocus"
+            },
+            {
+                "command": "chainGrep.toggleHighlight",
+                "key": "ctrl+alt+m",
                 "when": "editorTextFocus"
             }
         ]
