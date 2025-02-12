@@ -2,8 +2,9 @@
     "publisher": "rejzerek",
     "name": "chain-grep",
     "displayName": "Chain Grep",
-    "description": "Chain Grep is a Visual Studio Code extension that lets you perform sequential (chained) text searches and regular expression filters on a file. It allows you to build a series of grep operations where each step further refines the previous result. Additionally, you can refresh the entire chain, so when the source file is updated, all your filtering steps are reapplied automatically.",
-    "version": "0.0.2",
+    "description": "Chain Grep enables chained text and regex searches in VS Code — refine your results step by step and refresh the entire chain when the source updates.",
+    "icon": "icon.png",
+    "version": "0.0.3",
     "engines": {
         "vscode": "^1.85.2"
     },
