@@ -37,11 +37,19 @@
             },
             {
                 "command": "chainGrep.toggleHighlight",
-                "title": "Chain Grep: Toggle Highlight"
+                "title": "Chain Grep: Toggle Chained Highlight"
             },
             {
                 "command": "chainGrep.clearHighlights",
-                "title": "Chain Grep: Clear Highlights"
+                "title": "Chain Grep: Clear Chained Highlights"
+            },
+            {
+                "command": "chainGrep.toggleHighlightGlobal",
+                "title": "Chain Grep: Toggle Global Highlight"
+            },
+            {
+                "command": "chainGrep.clearHighlightsGlobal",
+                "title": "Chain Grep: Clear Global Highlights"
             }
         ],
         "keybindings": [
