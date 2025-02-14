@@ -11,6 +11,7 @@ Watch a short [features showcase](https://www.youtube.com/watch?v=e_PP9rlfQ1M) o
 -   **Selection Shortcut**: Press `CTRL+ALT+G` (or your custom keybinding) to grep any currently selected text.
 -   **Results in a New Document**: Each chain’s results appear in an unsaved document, displaying both a summary and a detailed log.
 -   **Highlighting**: Toggle highlights for any string or special character, with persistent highlights across file switches.
+-   **Chained and Global Highlighting**: Chain Grep offers two types of highlighting: global and chained. Chained highlights are specific to the current chain. Global highlights persist across all files.
 -   **Automatic Re-Highlighting**: Whenever you return to a file, any highlights you had before are restored.
 -   **Easy Refresh**: The "Chain Grep: Refresh" command reverts the source file from disk (pulling in external changes, if any) and reapplies the entire chain.
 
@@ -58,8 +59,10 @@ Watch a short [features showcase](https://www.youtube.com/watch?v=e_PP9rlfQ1M) o
 -   **Chain Grep: Find Regex**: Opens the popup for a regex query.
 -   **Chain Grep: Grep Selection**: Prefills the popup with your selection and executes a text search.
 -   **Chain Grep: Refresh**: Re-runs the search chain on the updated source file.
--   **Chain Grep: Toggle Highlight**: Toggles highlighting for the selection or word under the cursor.
--   **Chain Grep: Clear Highlights**: Removes all highlights.
+-   **Chain Grep: Toggle Chained Highlight**: Toggles highlighting for the selection or word under the cursor for chained files.
+-   **Chain Grep: Clear Chained Highlights**: Removes all chained highlights.
+-   **Chain Grep: Toggle Global Highlight**: Toggles highlighting for the selection or word under the cursor globally.
+-   **Chain Grep: Clear Global Highlights**: Removes all global highlights.
 
 ### Typical Workflow
 

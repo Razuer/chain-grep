@@ -4,7 +4,7 @@
     "displayName": "Chain Grep",
     "description": "Chain Grep enables chained text, regex searches and text highlighting in VS Code — refine your results step by step and refresh the entire chain when the source updates.",
     "icon": "icon.png",
-    "version": "0.0.4",
+    "version": "0.0.5",
     "engines": {
         "vscode": "^1.85.2"
     },
