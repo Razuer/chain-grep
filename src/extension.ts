@@ -14,6 +14,55 @@ interface ChainGrepChain {
     sourceUri: vscode.Uri;
 }
 
+interface LocalHighlightState {
+    decorations: vscode.TextEditorDecorationType[];
+    words: (string | undefined)[];
+    next: number;
+}
+
+const chainGrepMap: Map<string, ChainGrepChain> = new Map();
+
+const chainGrepContents: Map<string, string> = new Map();
+
+const CHAIN_GREP_SCHEME = "chaingrep";
+
+function loadConfiguredPalette(): string {
+    const config = vscode.workspace.getConfiguration("chainGrep");
+    const userPalette = config.get<string>("colours");
+    if (userPalette && userPalette.trim()) {
+        return userPalette;
+    } else {
+        return DEFAULT_COLOURS;
+    }
+}
+
+function areRandomColorsEnabled(): boolean {
+    const config = vscode.workspace.getConfiguration("chainGrep");
+    return config.get<boolean>("randomColors") === true;
+}
+
+function isDetailedChainDocEnabled(): boolean {
+    const config = vscode.workspace.getConfiguration("chainGrep");
+    return config.get<boolean>("detailedChainDoc") === true;
+}
+
+function shuffleArray<T>(arr: T[]): T[] {
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+}
+
+const DEFAULT_COLOURS =
+    "#89CFF0:black, #FF6961:black, #77DD77:black, #C3A8FF:black, #FDFD96:black, #A0E7E5:black, #FFB7CE:black, #CCFF90:black, #B19CD9:black, #FF82A9:black, #A8BFFF:black, #FFDAB9:black, #A8D0FF:black, #FFE680:black, #A8E0FF:black, #FFCBA4:black, #E6A8D7:black, #FFCCD2:black, #ACE1AF:black, #FF99FF:black";
+
+let globalHighlightDecorations: vscode.TextEditorDecorationType[] = [];
+let globalHighlightWords: (string | undefined)[] = [];
+let globalNextHighlight = 0;
+
+const localHighlightMap = new Map<string, LocalHighlightState>();
+
 class ChainGrepNode extends vscode.TreeItem {
     children: ChainGrepNode[] = [];
     parent?: ChainGrepNode;
@@ -80,12 +129,19 @@ class ChainGrepDataProvider implements vscode.TreeDataProvider<ChainGrepNode> {
         let root = this.fileRoots.get(sourceUri);
         if (!root) {
             const filename = this.extractFilenameFromUri(sourceUri);
-            root = new ChainGrepNode(filename, vscode.TreeItemCollapsibleState.Expanded, [], vscode.Uri.parse(sourceUri));
+            root = new ChainGrepNode(
+                filename,
+                vscode.TreeItemCollapsibleState.Expanded,
+                [],
+                vscode.Uri.parse(sourceUri)
+            );
             this.fileRoots.set(sourceUri, root);
         }
 
-        let labelWithOptions = label;
         const lastQuery = chain[chain.length - 1];
+        const prefix = lastQuery && lastQuery.type === "text" ? "[T]" : "[R]";
+
+        let flagsStr = "";
         if (lastQuery) {
             const flags: string[] = [];
             if (lastQuery.inverted) {
@@ -95,12 +151,14 @@ class ChainGrepDataProvider implements vscode.TreeDataProvider<ChainGrepNode> {
                 flags.push("case");
             }
             if (flags.length) {
-                labelWithOptions += ` (${flags.join(",")})`;
+                flagsStr = ` (${flags.join(", ")})`;
             }
         }
 
+        const displayLabel = `${prefix} "${label}"${flagsStr}`;
+
         const childNode = new ChainGrepNode(
-            `[Text] "${labelWithOptions}"`,
+            displayLabel,
             vscode.TreeItemCollapsibleState.None,
             chain,
             vscode.Uri.parse(sourceUri),
@@ -121,8 +179,10 @@ class ChainGrepDataProvider implements vscode.TreeDataProvider<ChainGrepNode> {
         }
         parentNode.collapsibleState = vscode.TreeItemCollapsibleState.Expanded;
 
-        let labelWithOptions = label;
         const lastQuery = chain[chain.length - 1];
+        const prefix = lastQuery && lastQuery.type === "text" ? "[T]" : "[R]";
+
+        let flagsStr = "";
         if (lastQuery) {
             const flags: string[] = [];
             if (lastQuery.inverted) {
@@ -132,12 +192,14 @@ class ChainGrepDataProvider implements vscode.TreeDataProvider<ChainGrepNode> {
                 flags.push("case");
             }
             if (flags.length) {
-                labelWithOptions += ` (${flags.join(",")})`;
+                flagsStr = ` (${flags.join(", ")})`;
             }
         }
 
+        const displayLabel = `${prefix} "${label}"${flagsStr}`;
+
         const childNode = new ChainGrepNode(
-            `[Text] "${labelWithOptions}"`,
+            displayLabel,
             vscode.TreeItemCollapsibleState.None,
             chain,
             parentNode.sourceUri,
@@ -179,23 +241,6 @@ class ChainGrepDataProvider implements vscode.TreeDataProvider<ChainGrepNode> {
             return uriStr;
         }
     }
-}
-
-const chainGrepProvider = new ChainGrepDataProvider();
-
-const chainGrepMap: Map<string, ChainGrepChain> = new Map();
-
-const chainGrepContents: Map<string, string> = new Map();
-
-const CHAIN_GREP_SCHEME = "chaingrep";
-
-function toStat(content: string): vscode.FileStat {
-    return {
-        type: vscode.FileType.File,
-        ctime: Date.now(),
-        mtime: Date.now(),
-        size: Buffer.byteLength(content, "utf8"),
-    };
 }
 
 class ChainGrepFSProvider implements vscode.FileSystemProvider {
@@ -247,6 +292,15 @@ class ChainGrepFSProvider implements vscode.FileSystemProvider {
     rename(_oldUri: vscode.Uri, _newUri: vscode.Uri, _options: { overwrite: boolean }): void {}
 }
 
+function toStat(content: string): vscode.FileStat {
+    return {
+        type: vscode.FileType.File,
+        ctime: Date.now(),
+        mtime: Date.now(),
+        size: Buffer.byteLength(content, "utf8"),
+    };
+}
+
 vscode.workspace.onDidCloseTextDocument((doc) => {
     const docUri = doc.uri.toString();
     if (docUri.startsWith(`${CHAIN_GREP_SCHEME}://`)) {
@@ -254,44 +308,17 @@ vscode.workspace.onDidCloseTextDocument((doc) => {
     }
 });
 
-const DEFAULT_COLOURS =
-    "#89CFF0:black, #FF6961:black, #77DD77:black, #C3A8FF:black, #FDFD96:black, #A0E7E5:black, #FFB7CE:black, #CCFF90:black, #B19CD9:black, #FF82A9:black, #A8BFFF:black, #FFDAB9:black, #A8D0FF:black, #FFE680:black, #A8E0FF:black, #FFCBA4:black, #E6A8D7:black, #FFCCD2:black, #ACE1AF:black, #FF99FF:black";
-
-let globalHighlightDecorations: vscode.TextEditorDecorationType[] = [];
-let globalHighlightWords: (string | undefined)[] = [];
-let globalNextHighlight = 0;
-
-interface LocalHighlightState {
-    decorations: vscode.TextEditorDecorationType[];
-    words: (string | undefined)[];
-    next: number;
-}
-
-const localHighlightMap = new Map<string, LocalHighlightState>();
-
-function createHighlightDecorationsFromColours(): vscode.TextEditorDecorationType[] {
-    const coloursArr = DEFAULT_COLOURS.split(",").map((pair) =>
-        pair
-            .trim()
-            .split(":")
-            .map((c) => c.trim())
-    );
-    return coloursArr.map(([bg, fg]) =>
-        vscode.window.createTextEditorDecorationType({
-            backgroundColor: bg,
-            color: fg,
-            borderRadius: "4px",
-        })
-    );
-}
-
 function initGlobalHighlightDecorations() {
-    const globalColoursArr = DEFAULT_COLOURS.split(",").map((pair) =>
+    let palette = loadConfiguredPalette();
+    let globalColoursArr = palette.split(",").map((pair) =>
         pair
             .trim()
             .split(":")
             .map((c) => c.trim())
     );
+    if (areRandomColorsEnabled()) {
+        globalColoursArr = shuffleArray(globalColoursArr);
+    }
     globalHighlightDecorations = [];
     globalHighlightWords = [];
 
@@ -457,6 +484,26 @@ function getLocalHighlightState(groupKey: string): LocalHighlightState {
     return existing;
 }
 
+function createHighlightDecorationsFromColours(): vscode.TextEditorDecorationType[] {
+    let palette = loadConfiguredPalette();
+    let coloursArr = palette.split(",").map((pair) =>
+        pair
+            .trim()
+            .split(":")
+            .map((c) => c.trim())
+    );
+    if (areRandomColorsEnabled()) {
+        coloursArr = shuffleArray(coloursArr);
+    }
+    return coloursArr.map(([bg, fg]) =>
+        vscode.window.createTextEditorDecorationType({
+            backgroundColor: bg,
+            color: fg,
+            borderRadius: "4px",
+        })
+    );
+}
+
 function getLocalHighlightKey(docUri: string): string {
     if (chainGrepMap.has(docUri)) {
         const chainInfo = chainGrepMap.get(docUri)!;
@@ -594,7 +641,32 @@ function reapplyHighlightsLocal(editor: vscode.TextEditor) {
     }
 }
 
+async function validateChain(queries: ChainGrepQuery[]): Promise<string[]> {
+    const errors: string[] = [];
+    queries.forEach((q, index) => {
+        if (q.type === "regex") {
+            let flags = q.flags || "";
+            if (!flags.includes("s")) {
+                flags += "s";
+                q.flags = flags;
+            }
+            try {
+                new RegExp(q.query, flags);
+            } catch {
+                errors.push(`Step ${index + 1}: Invalid regex '${q.query}' with flags '${flags}'`);
+            }
+        }
+    });
+    return errors;
+}
+
 async function executeChainSearch(sourceUri: vscode.Uri, chain: ChainGrepQuery[]): Promise<string[]> {
+    const validationErrors = await validateChain(chain);
+    if (validationErrors.length) {
+        vscode.window.showInformationMessage("Validation errors found: " + validationErrors.join("; "));
+        return [];
+    }
+
     let sourceDoc: vscode.TextDocument;
     try {
         sourceDoc = await vscode.workspace.openTextDocument(sourceUri);
@@ -703,18 +775,26 @@ function buildChainPath(chain: ChainGrepQuery[]): string {
         .join("->");
 }
 
-function sanitizeLabelForFilename(label: string): string {
-    return label.replace(/[^a-zA-Z0-9_\-\.]+/g, "_");
-}
-
-async function executeChainSearchAndDisplayResults(sourceUri: vscode.Uri, chain: ChainGrepQuery[], parentDocUri?: string, label?: string) {
+async function executeChainSearchAndDisplayResults(
+    sourceUri: vscode.Uri,
+    chain: ChainGrepQuery[],
+    parentDocUri?: string,
+    label?: string
+) {
     const results = await executeChainSearch(sourceUri, chain);
     if (!results.length) {
         vscode.window.showInformationMessage("No matches found.");
     }
 
+    // We'll only include the detailed header if isDetailedChainDocEnabled is true.
     const header = buildChainDetailedHeader(chain);
-    const content = header + "\n\n" + results.join("\n");
+    let content = "";
+    if (isDetailedChainDocEnabled()) {
+        content = header + "\n\n" + results.join("\n");
+    } else {
+        // if detail is disabled, only list results.
+        content = results.join("\n");
+    }
 
     const sourceFilename = path.basename(sourceUri.fsPath);
     const extension = path.extname(sourceFilename);
@@ -723,9 +803,6 @@ async function executeChainSearchAndDisplayResults(sourceUri: vscode.Uri, chain:
     const chainDescriptor = buildChainPath(chain);
 
     let docName = `[${baseName}] : ${chainDescriptor}${extension}`;
-
-    // sanitize
-    // docName = sanitizeLabelForFilename(docName);
 
     if (docName.length > 60) {
         docName = docName.slice(0, 60) + "..." + extension;
@@ -750,7 +827,11 @@ async function executeChainSearchAndDisplayResults(sourceUri: vscode.Uri, chain:
     }
 }
 
-async function executeChainSearchAndUpdateEditor(sourceUri: vscode.Uri, chain: ChainGrepQuery[], editor: vscode.TextEditor) {
+async function executeChainSearchAndUpdateEditor(
+    sourceUri: vscode.Uri,
+    chain: ChainGrepQuery[],
+    editor: vscode.TextEditor
+) {
     const results = await executeChainSearch(sourceUri, chain);
     if (!results.length) {
         vscode.window.showInformationMessage("No matches found after refresh.");
@@ -758,7 +839,13 @@ async function executeChainSearchAndUpdateEditor(sourceUri: vscode.Uri, chain: C
     }
 
     const header = buildChainDetailedHeader(chain);
-    const content = header + "\n\n" + results.join("\n");
+
+    let content = "";
+    if (isDetailedChainDocEnabled()) {
+        content = header + "\n\n" + results.join("\n");
+    } else {
+        content = results.join("\n");
+    }
 
     chainGrepContents.set(editor.document.uri.toString(), content);
 
@@ -862,7 +949,12 @@ async function openNode(node: ChainGrepNode) {
                 const { chain, sourceUri } = chainDoc;
                 const results = await executeChainSearch(sourceUri, chain);
                 const header = buildChainDetailedHeader(chain);
-                const content = header + "\n\n" + results.join("\n");
+                let content = "";
+                if (isDetailedChainDocEnabled()) {
+                    content = header + "\n\n" + results.join("\n");
+                } else {
+                    content = results.join("\n");
+                }
                 chainGrepContents.set(node.docUri, content);
             }
         }
@@ -912,6 +1004,8 @@ async function refreshAndOpen(node: ChainGrepNode) {
     }
 }
 
+const chainGrepProvider = new ChainGrepDataProvider();
+
 export function activate(context: vscode.ExtensionContext) {
     initGlobalHighlightDecorations();
 
@@ -932,9 +1026,12 @@ export function activate(context: vscode.ExtensionContext) {
         closeNode(node);
     });
 
-    const refreshAndOpenCmd = vscode.commands.registerCommand("_chainGrep.refreshAndOpenNode", (node: ChainGrepNode) => {
-        refreshAndOpen(node);
-    });
+    const refreshAndOpenCmd = vscode.commands.registerCommand(
+        "_chainGrep.refreshAndOpenNode",
+        (node: ChainGrepNode) => {
+            refreshAndOpen(node);
+        }
+    );
 
     const toggleHighlightCmd = vscode.commands.registerTextEditorCommand("chainGrep.toggleHighlight", () => {
         toggleHighlightLocal();
@@ -944,13 +1041,19 @@ export function activate(context: vscode.ExtensionContext) {
         clearHighlightsLocal();
     });
 
-    const toggleHighlightGlobalCmd = vscode.commands.registerTextEditorCommand("chainGrep.toggleHighlightGlobal", () => {
-        toggleHighlightGlobal();
-    });
+    const toggleHighlightGlobalCmd = vscode.commands.registerTextEditorCommand(
+        "chainGrep.toggleHighlightGlobal",
+        () => {
+            toggleHighlightGlobal();
+        }
+    );
 
-    const clearHighlightsGlobalCmd = vscode.commands.registerTextEditorCommand("chainGrep.clearHighlightsGlobal", () => {
-        clearHighlightsGlobal();
-    });
+    const clearHighlightsGlobalCmd = vscode.commands.registerTextEditorCommand(
+        "chainGrep.clearHighlightsGlobal",
+        () => {
+            clearHighlightsGlobal();
+        }
+    );
 
     const grepTextCmd = vscode.commands.registerTextEditorCommand("chainGrep.grepText", async (editor) => {
         const input = await showQueryAndOptionsQuickInput();
