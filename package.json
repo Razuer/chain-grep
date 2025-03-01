@@ -4,7 +4,7 @@
     "displayName": "Chain Grep",
     "description": "Chain Grep enables chained text, regex searches and text highlighting in VS Code — refine your results step by step and refresh the entire chain when the source updates.",
     "icon": "icon.png",
-    "version": "0.0.5",
+    "version": "1.0.0",
     "engines": {
         "vscode": "^1.85.2"
     },
@@ -20,12 +20,12 @@
     "contributes": {
         "commands": [
             {
-                "command": "chainGrep.findText",
-                "title": "Chain Grep: Find Text"
+                "command": "chainGrep.grepText",
+                "title": "Chain Grep: Grep Text"
             },
             {
-                "command": "chainGrep.findRegex",
-                "title": "Chain Grep: Find Regex"
+                "command": "chainGrep.grepRegex",
+                "title": "Chain Grep: Grep Regex"
             },
             {
                 "command": "chainGrep.grepSelection",
@@ -50,6 +50,20 @@
             {
                 "command": "chainGrep.clearHighlightsGlobal",
                 "title": "Chain Grep: Clear Global Highlights"
+            },
+            {
+                "command": "_chainGrep.openNode",
+                "title": "Open Node"
+            },
+            {
+                "command": "_chainGrep.closeNode",
+                "title": "Close Node",
+                "icon": "$(trash)"
+            },
+            {
+                "command": "_chainGrep.refreshAndOpenNode",
+                "title": "Refresh & Open",
+                "icon": "$(sync)"
             }
         ],
         "keybindings": [
@@ -63,7 +77,38 @@
                 "key": "ctrl+alt+m",
                 "when": "editorTextFocus"
             }
-        ]
+        ],
+        "viewsContainers": {
+            "activitybar": [
+                {
+                    "id": "chainGrepViewContainer",
+                    "title": "Chain Grep",
+                    "icon": "chain-grep-icon.svg"
+                }
+            ]
+        },
+        "views": {
+            "chainGrepViewContainer": [
+                {
+                    "id": "chainGrepView",
+                    "name": "Chain Grep"
+                }
+            ]
+        },
+        "menus": {
+            "view/item/context": [
+                {
+                    "command": "_chainGrep.refreshAndOpenNode",
+                    "when": "viewItem == chainGrep.chainNode",
+                    "group": "inline"
+                },
+                {
+                    "command": "_chainGrep.closeNode",
+                    "when": "viewItem == chainGrep.chainNode || viewItem == chainGrep.fileRoot",
+                    "group": "inline@50"
+                }
+            ]
+        }
     },
     "scripts": {
         "vscode:prepublish": "npm run package",

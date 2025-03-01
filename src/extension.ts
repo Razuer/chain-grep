@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import * as path from "path";
 
 // Represents a single query in the chain grep process.
 interface ChainGrepQuery {
@@ -9,35 +10,361 @@ interface ChainGrepQuery {
     caseSensitive?: boolean;
 }
 
-// Represents the entire chain of queries for a given chain doc, plus the URI of the source file.
+// Holds a chain (sequence of queries) plus the URI of the source file.
 interface ChainGrepChain {
     chain: ChainGrepQuery[];
     sourceUri: vscode.Uri;
 }
 
-// Maps chain doc URIs to their chain state.
+////////////////////////////////////
+// CHAIN GREP NODE / TREE STRUCTURE
+////////////////////////////////////
+
+/**
+ * A node in the Tree View.
+ * - If docUri is undefined, it's the root node (the source file).
+ * - If docUri is defined, it represents a chain doc.
+ */
+class ChainGrepNode extends vscode.TreeItem {
+    children: ChainGrepNode[] = [];
+    parent?: ChainGrepNode;
+    chain: ChainGrepQuery[];
+    sourceUri: vscode.Uri;
+    docUri?: string;
+
+    constructor(
+        label: string,
+        collapsibleState: vscode.TreeItemCollapsibleState,
+        chain: ChainGrepQuery[],
+        sourceUri: vscode.Uri,
+        parent?: ChainGrepNode,
+        docUri?: string
+    ) {
+        super(label, collapsibleState);
+        this.chain = chain;
+        this.sourceUri = sourceUri;
+        this.parent = parent;
+        this.docUri = docUri;
+
+        if (!docUri) {
+            // Root node => opens source file. Let's allow context menu with 'close' if you want.
+            this.contextValue = "chainGrep.fileRoot";
+            this.command = {
+                title: "Open Source",
+                command: "_chainGrep.openNode",
+                arguments: [this],
+            };
+        } else {
+            this.contextValue = "chainGrep.chainNode";
+            this.command = {
+                title: "Open Chain",
+                command: "_chainGrep.openNode",
+                arguments: [this],
+            };
+        }
+    }
+}
+
+/**
+ * Provides data for the "chainGrepView" tree.
+ */
+class ChainGrepDataProvider implements vscode.TreeDataProvider<ChainGrepNode> {
+    private _onDidChangeTreeData: vscode.EventEmitter<
+        ChainGrepNode | undefined | void
+    > = new vscode.EventEmitter();
+    readonly onDidChangeTreeData: vscode.Event<
+        ChainGrepNode | undefined | void
+    > = this._onDidChangeTreeData.event;
+
+    // Maps from source file URI => root node.
+    private fileRoots: Map<string, ChainGrepNode> = new Map();
+    // Maps from docUri => chain node.
+    private docUriToNode: Map<string, ChainGrepNode> = new Map();
+
+    refresh(): void {
+        this._onDidChangeTreeData.fire();
+    }
+
+    getTreeItem(element: ChainGrepNode): vscode.TreeItem {
+        return element;
+    }
+
+    getChildren(element?: ChainGrepNode): Thenable<ChainGrepNode[]> {
+        if (!element) {
+            // Return all root nodes.
+            return Promise.resolve(Array.from(this.fileRoots.values()));
+        } else {
+            // Return children of the given node.
+            return Promise.resolve(element.children);
+        }
+    }
+
+    /**
+     * Creates/locates a root for the source file, then adds a new child representing the chain.
+     */
+    addRootChain(
+        sourceUri: string,
+        label: string,
+        chain: ChainGrepQuery[],
+        docUri: string
+    ) {
+        let root = this.fileRoots.get(sourceUri);
+        if (!root) {
+            const filename = this.extractFilenameFromUri(sourceUri);
+            root = new ChainGrepNode(
+                filename,
+                vscode.TreeItemCollapsibleState.Expanded,
+                [],
+                vscode.Uri.parse(sourceUri)
+            );
+            this.fileRoots.set(sourceUri, root);
+        }
+
+        // Build label for the new child, reflecting invert/case if used.
+        let labelWithOptions = label;
+        const lastQuery = chain[chain.length - 1];
+        if (lastQuery) {
+            const flags: string[] = [];
+            if (lastQuery.inverted) {
+                flags.push("invert");
+            }
+            if (lastQuery.caseSensitive) {
+                flags.push("case");
+            }
+            if (flags.length) {
+                labelWithOptions += ` (${flags.join(",")})`;
+            }
+        }
+
+        const childNode = new ChainGrepNode(
+            `[Text] "${labelWithOptions}"`,
+            vscode.TreeItemCollapsibleState.None,
+            chain,
+            vscode.Uri.parse(sourceUri),
+            root,
+            docUri
+        );
+        this.docUriToNode.set(docUri, childNode);
+        root.children.push(childNode);
+        root.collapsibleState = vscode.TreeItemCollapsibleState.Expanded;
+        this.refresh();
+    }
+
+    /**
+     * Adds a child node to an existing chain doc node, or if not found, becomes a new root.
+     */
+    addSubChain(
+        parentDocUri: string,
+        label: string,
+        chain: ChainGrepQuery[],
+        docUri: string
+    ) {
+        const parentNode = this.docUriToNode.get(parentDocUri);
+        if (!parentNode) {
+            // If parent doesn't exist, treat as a new root chain.
+            this.addRootChain(parentDocUri, label, chain, docUri);
+            return;
+        }
+        parentNode.collapsibleState = vscode.TreeItemCollapsibleState.Expanded;
+
+        let labelWithOptions = label;
+        const lastQuery = chain[chain.length - 1];
+        if (lastQuery) {
+            const flags: string[] = [];
+            if (lastQuery.inverted) {
+                flags.push("invert");
+            }
+            if (lastQuery.caseSensitive) {
+                flags.push("case");
+            }
+            if (flags.length) {
+                labelWithOptions += ` (${flags.join(",")})`;
+            }
+        }
+
+        const childNode = new ChainGrepNode(
+            `[Text] "${labelWithOptions}"`,
+            vscode.TreeItemCollapsibleState.None,
+            chain,
+            parentNode.sourceUri,
+            parentNode,
+            docUri
+        );
+        this.docUriToNode.set(docUri, childNode);
+        parentNode.children.push(childNode);
+        this.refresh();
+    }
+
+    /**
+     * Removes a node from the tree. Used by 'Close' context menu.
+     * If it's a root node, remove from fileRoots. If child node, remove from parent's children.
+     */
+    removeNode(node: ChainGrepNode) {
+        // If there's a docUri, it means it's a chain doc child.
+        if (node.docUri) {
+            // Remove from parent's children.
+            const parent = node.parent;
+            if (parent) {
+                parent.children = parent.children.filter((c) => c !== node);
+            }
+            this.docUriToNode.delete(node.docUri);
+
+            // Also remove chain doc from memory.
+            chainGrepMap.delete(node.docUri);
+            chainGrepContents.delete(node.docUri);
+        } else {
+            // It's a root node => remove from fileRoots.
+            // We find the key.
+            for (const [key, val] of this.fileRoots.entries()) {
+                if (val === node) {
+                    this.fileRoots.delete(key);
+                    break;
+                }
+            }
+        }
+        this.refresh();
+    }
+
+    private extractFilenameFromUri(uriStr: string): string {
+        try {
+            const u = vscode.Uri.parse(uriStr);
+            const segments = u.path.split("/");
+            return segments[segments.length - 1] || uriStr;
+        } catch {
+            return uriStr;
+        }
+    }
+}
+
+// Single instance of the data provider.
+const chainGrepProvider = new ChainGrepDataProvider();
+
+// Maps docUri => chain.
 const chainGrepMap: Map<string, ChainGrepChain> = new Map();
 
-// Default highlight colors and border/text styles.
+// In-memory content for chain docs.
+const chainGrepContents: Map<string, string> = new Map();
+
+// Custom scheme.
+const CHAIN_GREP_SCHEME = "chaingrep";
+
+// Minimal FileStat for the FS provider.
+function toStat(content: string): vscode.FileStat {
+    return {
+        type: vscode.FileType.File,
+        ctime: Date.now(),
+        mtime: Date.now(),
+        size: Buffer.byteLength(content, "utf8"),
+    };
+}
+
+/**
+ * FileSystemProvider for the chaingrep: scheme.
+ * Stores content in memory using chainGrepContents.
+ */
+class ChainGrepFSProvider implements vscode.FileSystemProvider {
+    onDidChangeFile: vscode.Event<vscode.FileChangeEvent[]>;
+    private _onDidChangeFile: vscode.EventEmitter<vscode.FileChangeEvent[]>;
+
+    constructor() {
+        this._onDidChangeFile = new vscode.EventEmitter<
+            vscode.FileChangeEvent[]
+        >();
+        this.onDidChangeFile = this._onDidChangeFile.event;
+    }
+
+    watch(
+        _uri: vscode.Uri,
+        _options: { recursive: boolean; excludes: string[] }
+    ): vscode.Disposable {
+        // no watching needed.
+        return new vscode.Disposable(() => {});
+    }
+
+    stat(uri: vscode.Uri): vscode.FileStat {
+        const content = chainGrepContents.get(uri.toString());
+        if (content === undefined) {
+            throw vscode.FileSystemError.FileNotFound();
+        }
+        return toStat(content);
+    }
+
+    readDirectory(_uri: vscode.Uri): [string, vscode.FileType][] {
+        return [];
+    }
+
+    createDirectory(_uri: vscode.Uri): void {
+        // no-op
+    }
+
+    readFile(uri: vscode.Uri): Uint8Array {
+        const content = chainGrepContents.get(uri.toString());
+        if (!content) {
+            throw vscode.FileSystemError.FileNotFound();
+        }
+        return Buffer.from(content, "utf8");
+    }
+
+    writeFile(
+        uri: vscode.Uri,
+        content: Uint8Array,
+        _options: { create: boolean; overwrite: boolean }
+    ): void {
+        chainGrepContents.set(
+            uri.toString(),
+            Buffer.from(content).toString("utf8")
+        );
+        this._onDidChangeFile.fire([
+            { type: vscode.FileChangeType.Changed, uri },
+        ]);
+    }
+
+    delete(uri: vscode.Uri, _options: { recursive: boolean }): void {
+        chainGrepContents.delete(uri.toString());
+        chainGrepMap.delete(uri.toString());
+        this._onDidChangeFile.fire([
+            { type: vscode.FileChangeType.Deleted, uri },
+        ]);
+    }
+
+    rename(
+        _oldUri: vscode.Uri,
+        _newUri: vscode.Uri,
+        _options: { overwrite: boolean }
+    ): void {
+        // not used.
+    }
+}
+
+// Clear memory for chain doc content if user closes it.
+vscode.workspace.onDidCloseTextDocument((doc) => {
+    const docUri = doc.uri.toString();
+    if (docUri.startsWith(`${CHAIN_GREP_SCHEME}://`)) {
+        chainGrepContents.delete(docUri);
+        // We keep chainGrepMap so we can regenerate if needed.
+    }
+});
+
+////////////////////////////////////
+// GLOBAL & LOCAL HIGHLIGHT LOGIC
+////////////////////////////////////
+
 const DEFAULT_COLOURS =
     "#89CFF0:black, #FF6961:black, #77DD77:black, #C3A8FF:black, #FDFD96:black, #A0E7E5:black, #FFB7CE:black, #CCFF90:black, #B19CD9:black, #FF82A9:black, #A8BFFF:black, #FFDAB9:black, #A8D0FF:black, #FFE680:black, #A8E0FF:black, #FFCBA4:black, #E6A8D7:black, #FFCCD2:black, #ACE1AF:black, #FF99FF:black";
 
-// Global highlighting state.
 let globalHighlightDecorations: vscode.TextEditorDecorationType[] = [];
 let globalHighlightWords: (string | undefined)[] = [];
 let globalNextHighlight = 0;
 
-// Holds highlight info for local (file-based or chain-based) highlighting.
 interface LocalHighlightState {
     decorations: vscode.TextEditorDecorationType[];
     words: (string | undefined)[];
     next: number;
 }
 
-// Maps a group key (source doc or chain doc) to local highlight info.
 const localHighlightMap = new Map<string, LocalHighlightState>();
 
-// Creates VS Code decoration types from the default colors.
+// Create highlight styles from DEFAULT_COLOURS.
 function createHighlightDecorationsFromColours(): vscode.TextEditorDecorationType[] {
     const coloursArr = DEFAULT_COLOURS.split(",").map((pair) =>
         pair
@@ -54,32 +381,7 @@ function createHighlightDecorationsFromColours(): vscode.TextEditorDecorationTyp
     );
 }
 
-// If a doc is a chain doc, return the URI of its source doc.
-// Otherwise, return docUri itself.
-function getLocalHighlightKey(docUri: string): string {
-    if (chainGrepMap.has(docUri)) {
-        const chainInfo = chainGrepMap.get(docUri)!;
-        return chainInfo.sourceUri.toString();
-    }
-    return docUri;
-}
-
-// Escapes a string so it can safely be used in a regular expression.
-function escapeRegExp(input: string): string {
-    return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-// Returns the selected text if any, otherwise the word under cursor.
-function getSelectedTextOrWord(editor: vscode.TextEditor): string | undefined {
-    const selection = editor.selection;
-    if (!selection.isEmpty) {
-        return editor.document.getText(selection);
-    }
-    const wordRange = editor.document.getWordRangeAtPosition(selection.start);
-    return wordRange ? editor.document.getText(wordRange) : undefined;
-}
-
-// Sets up decorations for global highlighting (using colors from the end first).
+// Initialize global highlight decorations.
 function initGlobalHighlightDecorations() {
     const globalColoursArr = DEFAULT_COLOURS.split(",").map((pair) =>
         pair
@@ -101,14 +403,18 @@ function initGlobalHighlightDecorations() {
         globalHighlightWords.push(undefined);
     });
 
-    // Start picking colors from the last index.
     globalNextHighlight = globalHighlightDecorations.length - 1;
 }
 
-// Finds the next free global decoration index from the end to the beginning.
+// Escape text for regex usage.
+function escapeRegExp(input: string): string {
+    return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Chooses next global highlight color from the end.
 function chooseNextGlobalHighlight(): number {
     let idx = globalNextHighlight;
-    let start = globalNextHighlight;
+    const start = globalNextHighlight;
     do {
         if (!globalHighlightWords[idx]) {
             globalNextHighlight = idx - 1;
@@ -123,7 +429,6 @@ function chooseNextGlobalHighlight(): number {
         }
     } while (idx !== start);
 
-    // If all are used, just reuse current.
     const ret = globalNextHighlight;
     globalNextHighlight = ret - 1;
     if (globalNextHighlight < 0) {
@@ -132,7 +437,7 @@ function chooseNextGlobalHighlight(): number {
     return ret;
 }
 
-// Adds a global highlight for the given text.
+// Adds a global highlight.
 function addHighlightGlobal(editor: vscode.TextEditor, text: string) {
     removeHighlightForTextGlobal(text);
     const idx = chooseNextGlobalHighlight();
@@ -140,7 +445,7 @@ function addHighlightGlobal(editor: vscode.TextEditor, text: string) {
     applyHighlightForTextGlobal(editor, text, idx);
 }
 
-// Highlights the given text with a specific decoration index in a single editor.
+// Applies a global highlight to an editor.
 function applyHighlightForTextGlobal(
     editor: vscode.TextEditor,
     text: string,
@@ -158,7 +463,7 @@ function applyHighlightForTextGlobal(
     editor.setDecorations(globalHighlightDecorations[idx], decorationOptions);
 }
 
-// Removes a global highlight for the given text in all open editors.
+// Removes a global highlight for given text.
 function removeHighlightForTextGlobal(text: string) {
     const idx = globalHighlightWords.findIndex((w) => w === text);
     if (idx === -1) {
@@ -170,44 +475,45 @@ function removeHighlightForTextGlobal(text: string) {
     globalHighlightWords[idx] = undefined;
 }
 
-// Toggles global highlighting of the currently selected text.
+// Toggles global highlight.
 function toggleHighlightGlobal() {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
         return;
     }
-    const text = getSelectedTextOrWord(editor);
-    if (!text) {
+    const selectionText = getSelectedTextOrWord(editor);
+    if (!selectionText) {
         return;
     }
-    const idx = globalHighlightWords.findIndex((w) => w === text);
+
+    const idx = globalHighlightWords.findIndex((w) => w === selectionText);
     if (idx === -1) {
-        addHighlightGlobal(editor, text);
+        addHighlightGlobal(editor, selectionText);
     } else {
-        removeHighlightForTextGlobal(text);
+        removeHighlightForTextGlobal(selectionText);
     }
     reapplyAllGlobalHighlights();
 }
 
-// Clears all global highlights from all open editors.
+// Clears all global highlights from all editors.
 function clearHighlightsGlobal() {
     for (const ed of vscode.window.visibleTextEditors) {
-        globalHighlightDecorations.forEach((decoration) => {
-            ed.setDecorations(decoration, []);
+        globalHighlightDecorations.forEach((dec) => {
+            ed.setDecorations(dec, []);
         });
     }
     globalHighlightWords.fill(undefined);
     globalNextHighlight = globalHighlightDecorations.length - 1;
 }
 
-// Reapplies all global highlights in all currently visible editors.
+// Reapply global highlights to all visible editors.
 function reapplyAllGlobalHighlights() {
     for (const ed of vscode.window.visibleTextEditors) {
         reapplyHighlightsGlobal(ed);
     }
 }
 
-// Recreates decorations for global highlights in a single editor.
+// Reapply global highlights to one editor.
 function reapplyHighlightsGlobal(editor: vscode.TextEditor) {
     const fullText = editor.document.getText();
     const wordsWithIndex = globalHighlightWords
@@ -248,26 +554,43 @@ function reapplyHighlightsGlobal(editor: vscode.TextEditor) {
     }
 }
 
-// Retrieves or creates local highlighting state for a given groupKey.
-function getLocalHighlightState(groupKey: string): LocalHighlightState {
-    const existing = localHighlightMap.get(groupKey);
-    if (existing) {
-        return existing;
+// Gets selected text or word under cursor.
+function getSelectedTextOrWord(editor: vscode.TextEditor): string | undefined {
+    const selection = editor.selection;
+    if (!selection.isEmpty) {
+        return editor.document.getText(selection);
     }
-    const newDecorations = createHighlightDecorationsFromColours();
-    const newState: LocalHighlightState = {
-        decorations: newDecorations,
-        words: new Array(newDecorations.length).fill(undefined),
-        next: 0,
-    };
-    localHighlightMap.set(groupKey, newState);
-    return newState;
+    const wordRange = editor.document.getWordRangeAtPosition(selection.start);
+    return wordRange ? editor.document.getText(wordRange) : undefined;
 }
 
-// Chooses the next available index for local highlighting.
+// Local highlight state.
+function getLocalHighlightState(groupKey: string): LocalHighlightState {
+    let existing = localHighlightMap.get(groupKey);
+    if (!existing) {
+        const newDecs = createHighlightDecorationsFromColours();
+        existing = {
+            decorations: newDecs,
+            words: new Array(newDecs.length).fill(undefined),
+            next: 0,
+        };
+        localHighlightMap.set(groupKey, existing);
+    }
+    return existing;
+}
+
+// Decide which groupKey to use (the source doc if doc is a chain doc).
+function getLocalHighlightKey(docUri: string): string {
+    if (chainGrepMap.has(docUri)) {
+        const chainInfo = chainGrepMap.get(docUri)!;
+        return chainInfo.sourceUri.toString();
+    }
+    return docUri;
+}
+
 function chooseNextLocalHighlight(state: LocalHighlightState): number {
     const start = state.next;
-    let idx = state.next;
+    let idx = start;
     do {
         if (!state.words[idx]) {
             return idx;
@@ -277,7 +600,7 @@ function chooseNextLocalHighlight(state: LocalHighlightState): number {
     return idx;
 }
 
-// Adds a local highlight for the given text in the current group.
+// Add a local highlight.
 function addHighlightLocal(editor: vscode.TextEditor, text: string) {
     const docUri = editor.document.uri.toString();
     const groupKey = getLocalHighlightKey(docUri);
@@ -289,7 +612,7 @@ function addHighlightLocal(editor: vscode.TextEditor, text: string) {
     applyHighlightForTextLocal(editor, text, idx);
 }
 
-// Applies local highlight for the specified text/index in all visible editors of the same group.
+// Apply local highlight to the given editor (and same-group editors).
 function applyHighlightForTextLocal(
     editor: vscode.TextEditor,
     text: string,
@@ -305,20 +628,19 @@ function applyHighlightForTextLocal(
         }
         const fullText = ed.document.getText();
         const regex = new RegExp(escapeRegExp(text), "g");
-        const decorationOptions: vscode.DecorationOptions[] = [];
+        const decoOpts: vscode.DecorationOptions[] = [];
         let match: RegExpExecArray | null;
         while ((match = regex.exec(fullText)) !== null) {
             const startPos = ed.document.positionAt(match.index);
             const endPos = ed.document.positionAt(match.index + text.length);
-            decorationOptions.push({
-                range: new vscode.Range(startPos, endPos),
-            });
+            decoOpts.push({ range: new vscode.Range(startPos, endPos) });
         }
-        ed.setDecorations(state.decorations[idx], decorationOptions);
+        ed.setDecorations(state.decorations[idx], decoOpts);
     }
 
     decorateSingle(editor);
 
+    // Apply to other visible editors in the same group.
     for (const ed of vscode.window.visibleTextEditors) {
         if (ed === editor) {
             continue;
@@ -329,7 +651,7 @@ function applyHighlightForTextLocal(
     }
 }
 
-// Removes local highlight for the given text in all visible editors of the same group.
+// Remove a local highlight.
 function removeHighlightForTextLocal(docUri: string, text: string) {
     const groupKey = getLocalHighlightKey(docUri);
     const state = getLocalHighlightState(groupKey);
@@ -347,7 +669,7 @@ function removeHighlightForTextLocal(docUri: string, text: string) {
     state.next = idx;
 }
 
-// Toggles local highlighting of the currently selected text.
+// Toggle local highlight of selected text.
 function toggleHighlightLocal() {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
@@ -357,6 +679,7 @@ function toggleHighlightLocal() {
     if (!text) {
         return;
     }
+
     const docUri = editor.document.uri.toString();
     const groupKey = getLocalHighlightKey(docUri);
     const state = getLocalHighlightState(groupKey);
@@ -368,20 +691,21 @@ function toggleHighlightLocal() {
     }
 }
 
-// Clears all local highlights in the current editor's group.
+// Clear all local highlights in the current doc's group.
 function clearHighlightsLocal() {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
         return;
     }
+
     const docUri = editor.document.uri.toString();
     const groupKey = getLocalHighlightKey(docUri);
     const state = getLocalHighlightState(groupKey);
 
     for (const ed of vscode.window.visibleTextEditors) {
         if (getLocalHighlightKey(ed.document.uri.toString()) === groupKey) {
-            state.decorations.forEach((decoration) => {
-                ed.setDecorations(decoration, []);
+            state.decorations.forEach((dec) => {
+                ed.setDecorations(dec, []);
             });
         }
     }
@@ -390,7 +714,7 @@ function clearHighlightsLocal() {
     state.next = 0;
 }
 
-// Re-applies local highlights for the current editor and all in the same group.
+// Reapply local highlights to an editor.
 function reapplyHighlightsLocal(editor: vscode.TextEditor) {
     const docUri = editor.document.uri.toString();
     const groupKey = getLocalHighlightKey(docUri);
@@ -404,7 +728,11 @@ function reapplyHighlightsLocal(editor: vscode.TextEditor) {
     }
 }
 
-// Executes the chain queries against the source file and returns matched lines.
+////////////////////
+// CHAIN GREP LOGIC
+////////////////////
+
+// Perform the actual search for all queries.
 async function executeChainSearch(
     sourceUri: vscode.Uri,
     chain: ChainGrepQuery[]
@@ -427,19 +755,7 @@ async function executeChainSearch(
     return filtered;
 }
 
-// Returns the chain info for the given editor, if any.
-function getChainForEditor(editor: vscode.TextEditor): {
-    chain: ChainGrepQuery[];
-    sourceUri: vscode.Uri;
-} {
-    const docUri = editor.document.uri.toString();
-    if (chainGrepMap.has(docUri)) {
-        return chainGrepMap.get(docUri)!;
-    }
-    return { chain: [], sourceUri: editor.document.uri };
-}
-
-// Applies a single query (text or regex) to an array of lines.
+// Apply one query step.
 function applyChainQuery(lines: string[], query: ChainGrepQuery): string[] {
     if (query.type === "text") {
         return lines.filter((line) => {
@@ -470,7 +786,19 @@ function applyChainQuery(lines: string[], query: ChainGrepQuery): string[] {
     }
 }
 
-// Builds a summary line describing the entire chain.
+// If editor doc is a chain doc, retrieve chain info; else treat doc as source.
+function getChainForEditor(editor: vscode.TextEditor): {
+    chain: ChainGrepQuery[];
+    sourceUri: vscode.Uri;
+} {
+    const docUri = editor.document.uri.toString();
+    if (chainGrepMap.has(docUri)) {
+        return chainGrepMap.get(docUri)!;
+    }
+    return { chain: [], sourceUri: editor.document.uri };
+}
+
+// Build a short summary line.
 function buildChainSummary(chain: ChainGrepQuery[]): string {
     const parts = chain.map((q) => {
         let prefix = q.type === "text" ? "T:" : "R:";
@@ -489,7 +817,7 @@ function buildChainSummary(chain: ChainGrepQuery[]): string {
     return "Chain Grep: " + parts.join(" -> ");
 }
 
-// Builds a multiline header describing each step in the chain.
+// Build a multiline header describing each chain step.
 function buildChainDetailedHeader(chain: ChainGrepQuery[]): string {
     const lines: string[] = ["--- Chain Grep Steps ---"];
     chain.forEach((q, i) => {
@@ -512,34 +840,102 @@ function buildChainDetailedHeader(chain: ChainGrepQuery[]): string {
     return lines.join("\n");
 }
 
-// Performs chain search, creates a new untitled doc, and displays results.
+// Build a short chain descriptor for naming.
+function buildChainPath(chain: ChainGrepQuery[]): string {
+    return chain
+        .map((q) => {
+            const prefix = q.type === "text" ? "T" : "R";
+            const invertMark = q.inverted ? "!" : "";
+            const caseMark = q.caseSensitive ? "C" : "";
+            let shortQuery = q.query;
+            if (shortQuery.length > 15) {
+                shortQuery = shortQuery.substring(0, 15) + "...";
+            }
+            return `${prefix}${invertMark}${caseMark}[${shortQuery}]`;
+        })
+        .join("->");
+}
+
+// Replace illegal chars with underscores.
+function sanitizeLabelForFilename(label: string): string {
+    return label.replace(/[^a-zA-Z0-9_\-\.]+/g, "_");
+}
+
+/**
+ * Create a new chain doc from the results, open in an editor, and add to the tree.
+ * Instead of using ".grep", we use the original source file extension.
+ */
 async function executeChainSearchAndDisplayResults(
     sourceUri: vscode.Uri,
-    chain: ChainGrepQuery[]
+    chain: ChainGrepQuery[],
+    parentDocUri?: string,
+    label?: string
 ) {
     const results = await executeChainSearch(sourceUri, chain);
     if (!results.length) {
         vscode.window.showInformationMessage("No matches found.");
-        return;
     }
-    const summary = buildChainSummary(chain);
-    const header = buildChainDetailedHeader(chain);
-    const content = summary + "\n" + header + "\n\n" + results.join("\n");
 
-    await vscode.commands.executeCommand(
-        "workbench.action.files.newUntitledFile"
-    );
-    const editor = vscode.window.activeTextEditor;
-    if (editor) {
-        await editor.edit((eb) => {
-            eb.insert(new vscode.Position(0, 0), content);
-        });
-        chainGrepMap.set(editor.document.uri.toString(), { chain, sourceUri });
-        reapplyHighlightsLocal(editor);
+    // const summary = buildChainSummary(chain);
+    const header = buildChainDetailedHeader(chain);
+    const content = header + "\n\n" + results.join("\n");
+
+    // We'll parse extension from the source file.
+    const sourceFilename = path.basename(sourceUri.fsPath);
+    const extension = path.extname(sourceFilename); // e.g. ".log"
+    const baseName = path.basename(sourceFilename, extension); // e.g. "example"
+
+    // Build a descriptor from chain.
+    const chainDescriptor = buildChainPath(chain);
+
+    // docName = baseName_chainDescriptor + extension
+    let docName = `[${baseName}] : ${chainDescriptor}${extension}`;
+
+    // sanitize
+    // docName = sanitizeLabelForFilename(docName);
+
+    // limit length if huge
+    if (docName.length > 60) {
+        docName = docName.slice(0, 60) + "..." + extension;
+    }
+
+    // We place docName in the path, so the tab name typically shows docName.
+    // E.g. chaingrep:///example_T[INFO]->R[Warn].log
+    const docUri = vscode.Uri.parse(`${CHAIN_GREP_SCHEME}:///${docName}`);
+
+    // Store content in memory.
+    chainGrepContents.set(docUri.toString(), content);
+    chainGrepMap.set(docUri.toString(), { chain, sourceUri });
+
+    // Open the doc.
+    const doc = await vscode.workspace.openTextDocument(docUri);
+    const editor = await vscode.window.showTextDocument(doc, {
+        preview: false,
+    });
+    reapplyHighlightsLocal(editor);
+
+    // Add to the tree.
+    const nodeLabel = label || chain[chain.length - 1].query;
+    if (parentDocUri) {
+        chainGrepProvider.addSubChain(
+            parentDocUri,
+            nodeLabel,
+            chain,
+            docUri.toString()
+        );
+    } else {
+        chainGrepProvider.addRootChain(
+            sourceUri.toString(),
+            nodeLabel,
+            chain,
+            docUri.toString()
+        );
     }
 }
 
-// Refreshes the chain doc with updated search results and re-applies highlights.
+/**
+ * Refresh an existing chain doc by re-running queries.
+ */
 async function executeChainSearchAndUpdateEditor(
     sourceUri: vscode.Uri,
     chain: ChainGrepQuery[],
@@ -550,21 +946,28 @@ async function executeChainSearchAndUpdateEditor(
         vscode.window.showInformationMessage("No matches found after refresh.");
         return;
     }
-    const summary = buildChainSummary(chain);
-    const header = buildChainDetailedHeader(chain);
-    const content = summary + "\n" + header + "\n\n" + results.join("\n");
 
-    const fullRange = new vscode.Range(
-        editor.document.positionAt(0),
-        editor.document.positionAt(editor.document.getText().length)
-    );
-    await editor.edit((eb) => {
-        eb.replace(fullRange, content);
+    // const summary = buildChainSummary(chain);
+    const header = buildChainDetailedHeader(chain);
+    const content = header + "\n\n" + results.join("\n");
+
+    // Overwrite existing content.
+    chainGrepContents.set(editor.document.uri.toString(), content);
+
+    // Force revert so the editor reloads from FS.
+    await vscode.commands.executeCommand("workbench.action.files.revert");
+
+    let oldViewColumn = editor.viewColumn || vscode.ViewColumn.One;
+
+    const doc = await vscode.workspace.openTextDocument(editor.document.uri);
+    const newEd = await vscode.window.showTextDocument(doc, {
+        preview: false,
+        viewColumn: oldViewColumn,
     });
-    reapplyHighlightsLocal(editor);
+    reapplyHighlightsLocal(newEd);
 }
 
-// Checks if a string looks like a valid regex.
+// Check if input is a valid regex.
 function isRegexValid(str: string): boolean {
     if (/^\/.*\/?[igm]{0,3}$/.test(str)) {
         return true;
@@ -583,10 +986,10 @@ function isRegexValid(str: string): boolean {
     return slashCount !== 1;
 }
 
-// Shows a quick input for the user to type a search query and toggle some options.
-async function showQueryAndOptionsQuickInput(
-    defaultQuery?: string
-): Promise<{ query: string; options: string[] } | undefined> {
+/**
+ * Show a quick input to read query + invert/case.
+ */
+async function showQueryAndOptionsQuickInput(defaultQuery?: string) {
     const quickPick = vscode.window.createQuickPick();
     quickPick.title = "Chain Grep | Toggle options -->";
     quickPick.placeholder = "Enter search query here...";
@@ -611,12 +1014,9 @@ async function showQueryAndOptionsQuickInput(
     ];
 
     quickPick.onDidTriggerButton((button) => {
-        if (button.tooltip && button.tooltip.startsWith("Invert")) {
+        if (button.tooltip?.startsWith("Invert")) {
             invertSelected = !invertSelected;
-        } else if (
-            button.tooltip &&
-            button.tooltip.startsWith("Case Sensitive")
-        ) {
+        } else if (button.tooltip?.startsWith("Case Sensitive")) {
             caseSensitiveSelected = !caseSensitiveSelected;
         }
         quickPick.buttons = [
@@ -637,30 +1037,159 @@ async function showQueryAndOptionsQuickInput(
         ];
     });
 
-    return new Promise((resolve) => {
-        quickPick.onDidAccept(() => {
-            const query = quickPick.value;
-            const options: string[] = [];
-            if (invertSelected) {
-                options.push("Invert");
-            }
-            if (caseSensitiveSelected) {
-                options.push("Case Sensitive");
-            }
-            quickPick.hide();
-            resolve({ query, options });
-        });
-        quickPick.onDidHide(() => {
-            resolve(undefined);
-        });
-        quickPick.show();
-    });
+    return new Promise<{ query: string; options: string[] } | undefined>(
+        (resolve) => {
+            quickPick.onDidAccept(() => {
+                const query = quickPick.value;
+                const options: string[] = [];
+                if (invertSelected) {
+                    options.push("Invert");
+                }
+                if (caseSensitiveSelected) {
+                    options.push("Case Sensitive");
+                }
+                quickPick.hide();
+                resolve({ query, options });
+            });
+            quickPick.onDidHide(() => {
+                resolve(undefined);
+            });
+            quickPick.show();
+        }
+    );
 }
 
-// Extension entry point.
+////////////////////////////////////
+// COMMAND: openNode (hidden)
+////////////////////////////////////
+
+/**
+ * openNode() called when user clicks a node in the Tree.
+ * - If docUri is set, open chain doc.
+ * - If not, open the source file.
+ */
+async function openNode(node: ChainGrepNode) {
+    if (node.docUri) {
+        // Possibly regenerate content if memory was cleared.
+        if (!chainGrepContents.has(node.docUri)) {
+            const chainDoc = chainGrepMap.get(node.docUri);
+            if (chainDoc) {
+                const { chain, sourceUri } = chainDoc;
+                const results = await executeChainSearch(sourceUri, chain);
+                // const summary = buildChainSummary(chain);
+                const header = buildChainDetailedHeader(chain);
+                const content = header + "\n\n" + results.join("\n");
+                chainGrepContents.set(node.docUri, content);
+            }
+        }
+        const docUri = vscode.Uri.parse(node.docUri);
+        const doc = await vscode.workspace.openTextDocument(docUri);
+        await vscode.window.showTextDocument(doc, { preview: false });
+    } else {
+        // This is the root => open original file.
+        const sourceDoc = await vscode.workspace.openTextDocument(
+            node.sourceUri
+        );
+        await vscode.window.showTextDocument(sourceDoc, { preview: false });
+    }
+}
+
+////////////////////////////////////
+// NEW COMMANDS FOR CONTEXT MENU
+////////////////////////////////////
+
+// Closes a node from the tree.
+async function closeNode(node: ChainGrepNode) {
+    chainGrepProvider.removeNode(node);
+}
+
+// Refreshes the chain doc and re-opens.
+async function refreshAndOpen(node: ChainGrepNode) {
+    if (!node.docUri) {
+        vscode.window.showInformationMessage("Can't refresh root node.");
+        return;
+    }
+
+    const chainDocInfo = chainGrepMap.get(node.docUri);
+    if (!chainDocInfo) {
+        vscode.window.showInformationMessage("No chain doc info found.");
+        return;
+    }
+
+    const { chain, sourceUri } = chainDocInfo;
+
+    try {
+        const sourceDoc = await vscode.workspace.openTextDocument(sourceUri);
+        await vscode.window.showTextDocument(sourceDoc, { preview: false });
+        await vscode.commands.executeCommand("workbench.action.files.revert");
+
+        const docUri = vscode.Uri.parse(node.docUri);
+        const chainDoc = await vscode.workspace.openTextDocument(docUri);
+        const newChainEditor = await vscode.window.showTextDocument(chainDoc, {
+            preview: false,
+        });
+
+        await executeChainSearchAndUpdateEditor(
+            sourceUri,
+            chain,
+            newChainEditor
+        );
+
+        vscode.window.showInformationMessage("Refreshed and opened chain doc.");
+    } catch {
+        vscode.window.showInformationMessage(
+            "Unable to refresh the chain doc."
+        );
+    }
+}
+
+////////////////////////////////////
+// ACTIVATE
+////////////////////////////////////
+
 export function activate(context: vscode.ExtensionContext) {
     initGlobalHighlightDecorations();
 
+    // Register the FS provider for chaingrep:.
+    const chainGrepFs = new ChainGrepFSProvider();
+    context.subscriptions.push(
+        vscode.workspace.registerFileSystemProvider(
+            CHAIN_GREP_SCHEME,
+            chainGrepFs,
+            {
+                isReadonly: false,
+            }
+        )
+    );
+
+    const treeView = vscode.window.registerTreeDataProvider(
+        "chainGrepView",
+        chainGrepProvider
+    );
+
+    // Private commands:
+    const openNodeCmd = vscode.commands.registerCommand(
+        "_chainGrep.openNode",
+        (node: ChainGrepNode) => {
+            openNode(node);
+        }
+    );
+
+    const closeNodeCmd = vscode.commands.registerCommand(
+        "_chainGrep.closeNode",
+        (node: ChainGrepNode) => {
+            closeNode(node);
+        }
+    );
+
+    const refreshAndOpenCmd = vscode.commands.registerCommand(
+        "_chainGrep.refreshAndOpenNode",
+        (node: ChainGrepNode) => {
+            refreshAndOpen(node);
+        }
+    );
+
+    // Public commands:
     const toggleHighlightCmd = vscode.commands.registerTextEditorCommand(
         "chainGrep.toggleHighlight",
         () => {
@@ -689,16 +1218,18 @@ export function activate(context: vscode.ExtensionContext) {
         }
     );
 
-    const findTextCmd = vscode.commands.registerTextEditorCommand(
-        "chainGrep.findText",
+    const grepTextCmd = vscode.commands.registerTextEditorCommand(
+        "chainGrep.grepText",
         async (editor) => {
             const input = await showQueryAndOptionsQuickInput();
             if (!input?.query) {
                 return;
             }
+
             const inverted = input.options.includes("Invert");
             const caseSensitive = input.options.includes("Case Sensitive");
             const { chain, sourceUri } = getChainForEditor(editor);
+
             const newQuery: ChainGrepQuery = {
                 type: "text",
                 query: input.query,
@@ -706,25 +1237,40 @@ export function activate(context: vscode.ExtensionContext) {
                 caseSensitive,
             };
             const newChain = [...chain, newQuery];
-            await executeChainSearchAndDisplayResults(sourceUri, newChain);
+
+            const docUri = editor.document.uri.toString();
+            let parentDocUri: string | undefined;
+            if (chainGrepMap.has(docUri)) {
+                parentDocUri = docUri;
+            }
+
+            await executeChainSearchAndDisplayResults(
+                sourceUri,
+                newChain,
+                parentDocUri,
+                input.query
+            );
         }
     );
 
-    const findRegexCmd = vscode.commands.registerTextEditorCommand(
-        "chainGrep.findRegex",
+    const grepRegexCmd = vscode.commands.registerTextEditorCommand(
+        "chainGrep.grepRegex",
         async (editor) => {
             const input = await showQueryAndOptionsQuickInput();
             if (!input?.query) {
                 return;
             }
+
             const inverted = input.options.includes("Invert");
             const caseSensitive = input.options.includes("Case Sensitive");
+
             if (!isRegexValid(input.query)) {
                 vscode.window.showInformationMessage(
                     "Invalid regular expression input (illegal single slash)."
                 );
                 return;
             }
+
             let pattern: string;
             let flags = "";
             if (
@@ -738,6 +1284,7 @@ export function activate(context: vscode.ExtensionContext) {
                 pattern = input.query;
             }
             pattern = pattern.replace(/\/\//g, "/");
+
             const { chain, sourceUri } = getChainForEditor(editor);
             const newQuery: ChainGrepQuery = {
                 type: "regex",
@@ -747,22 +1294,35 @@ export function activate(context: vscode.ExtensionContext) {
                 caseSensitive,
             };
             const newChain = [...chain, newQuery];
-            await executeChainSearchAndDisplayResults(sourceUri, newChain);
+
+            const docUri = editor.document.uri.toString();
+            let parentDocUri: string | undefined;
+            if (chainGrepMap.has(docUri)) {
+                parentDocUri = docUri;
+            }
+
+            await executeChainSearchAndDisplayResults(
+                sourceUri,
+                newChain,
+                parentDocUri,
+                input.query
+            );
         }
     );
 
     const grepSelectionCmd = vscode.commands.registerTextEditorCommand(
         "chainGrep.grepSelection",
         async (editor) => {
-            const selection = editor.selection;
-            let selText = editor.document.getText(selection).trim();
+            const selText = editor.document.getText(editor.selection).trim();
             const input = await showQueryAndOptionsQuickInput(selText || "");
             if (!input?.query) {
                 return;
             }
+
             const inverted = input.options.includes("Invert");
             const caseSensitive = input.options.includes("Case Sensitive");
             const { chain, sourceUri } = getChainForEditor(editor);
+
             const newQuery: ChainGrepQuery = {
                 type: "text",
                 query: input.query,
@@ -770,7 +1330,19 @@ export function activate(context: vscode.ExtensionContext) {
                 caseSensitive,
             };
             const newChain = [...chain, newQuery];
-            await executeChainSearchAndDisplayResults(sourceUri, newChain);
+
+            const docUri = editor.document.uri.toString();
+            let parentDocUri: string | undefined;
+            if (chainGrepMap.has(docUri)) {
+                parentDocUri = docUri;
+            }
+
+            await executeChainSearchAndDisplayResults(
+                sourceUri,
+                newChain,
+                parentDocUri,
+                input.query
+            );
         }
     );
 
@@ -778,14 +1350,14 @@ export function activate(context: vscode.ExtensionContext) {
         "chainGrep.refresh",
         async (chainEditor) => {
             const chainDocUri = chainEditor.document.uri;
-            const docUri = chainDocUri.toString();
-            if (!chainGrepMap.has(docUri)) {
+            const docUriStr = chainDocUri.toString();
+            if (!chainGrepMap.has(docUriStr)) {
                 vscode.window.showInformationMessage(
                     "No chain grep found for this document."
                 );
                 return;
             }
-            const chainInfo = chainGrepMap.get(docUri)!;
+            const chainInfo = chainGrepMap.get(docUriStr)!;
             const sourceUri = chainInfo.sourceUri;
             try {
                 const sourceDoc = await vscode.workspace.openTextDocument(
@@ -822,25 +1394,26 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     context.subscriptions.push(
+        treeView,
+        openNodeCmd,
+        closeNodeCmd,
+        refreshAndOpenCmd,
         vscode.window.onDidChangeActiveTextEditor((editor) => {
             if (editor) {
                 reapplyHighlightsLocal(editor);
                 reapplyHighlightsGlobal(editor);
             }
-        })
-    );
-
-    context.subscriptions.push(
+        }),
         toggleHighlightCmd,
         clearHighlightsCmd,
         toggleHighlightGlobalCmd,
         clearHighlightsGlobalCmd,
-        findTextCmd,
-        findRegexCmd,
+        grepTextCmd,
+        grepRegexCmd,
         grepSelectionCmd,
         refreshChainCmd
     );
 }
 
-// Called when the extension is deactivated.
+// Cleanup if needed.
 export function deactivate() {}
