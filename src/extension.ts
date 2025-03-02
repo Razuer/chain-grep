@@ -63,10 +63,8 @@ let globalNextHighlight = 0;
 
 const localHighlightMap = new Map<string, LocalHighlightState>();
 
-// Add a global variable to hold extension context for persistence.
 let extensionContext: vscode.ExtensionContext;
 
-// Add debounce function
 function debounce<F extends (...args: any[]) => any>(func: F, waitFor: number): (...args: Parameters<F>) => void {
     let timeout: NodeJS.Timeout | null = null;
 
@@ -78,9 +76,7 @@ function debounce<F extends (...args: any[]) => any>(func: F, waitFor: number): 
     };
 }
 
-// Create a debounced save function
 const debouncedSavePersistentState = debounce(() => {
-    // The actual save operation
     const chainData = Array.from(chainGrepMap.entries()).map(([uri, data]) => [
         uri,
         { chain: data.chain, sourceUri: data.sourceUri.toString() },
@@ -102,21 +98,18 @@ const debouncedSavePersistentState = debounce(() => {
     });
 
     console.log("Chain Grep: State saved");
-}, 1000); // 1 second debounce
+}, 1000);
 
-// Replace the original function with a wrapper that calls the debounced version
 function savePersistentState() {
     debouncedSavePersistentState();
 }
 
-// Helper function: Load persistent state
 function loadPersistentState(context: vscode.ExtensionContext) {
     const stored = context.workspaceState.get<any>("chainGrepState");
     if (!stored) {
         return;
     }
 
-    // Restore chainGrepMap.
     if (stored.chainData) {
         for (const [uri, data] of stored.chainData) {
             chainGrepMap.set(uri, {
@@ -125,36 +118,30 @@ function loadPersistentState(context: vscode.ExtensionContext) {
             });
         }
     }
-    // Restore chainGrepContents.
     if (stored.contentsData) {
         for (const [uri, content] of stored.contentsData) {
             chainGrepContents.set(uri, content);
         }
     }
-    // Restore highlight state.
     if (stored.persistentHighlights) {
         if (stored.persistentHighlights.globalHighlightWords) {
             globalHighlightWords = stored.persistentHighlights.globalHighlightWords;
         }
         if (stored.persistentHighlights.localHighlights) {
             for (const [key, stateObj] of stored.persistentHighlights.localHighlights) {
-                const state = getLocalHighlightState(key); // creates new decorations
+                const state = getLocalHighlightState(key);
                 state.words = stateObj.words;
                 state.next = stateObj.next;
             }
         }
     }
 
-    // After restoring data, rebuild the tree view structure
     rebuildTreeViewFromState();
 }
 
-// Helper function to rebuild the tree view structure from loaded state
 function rebuildTreeViewFromState() {
-    // Group chain grep entries by their source URI
     const entriesBySource = new Map<string, Map<string, ChainGrepQuery[]>>();
 
-    // First pass: collect all entries by source
     for (const [docUri, chainInfo] of chainGrepMap.entries()) {
         const sourceUriStr = chainInfo.sourceUri.toString();
         if (!entriesBySource.has(sourceUriStr)) {
@@ -163,30 +150,20 @@ function rebuildTreeViewFromState() {
         entriesBySource.get(sourceUriStr)!.set(docUri, chainInfo.chain);
     }
 
-    // Second pass: rebuild the tree
     for (const [sourceUriStr, docEntries] of entriesBySource.entries()) {
-        // For each source file, build chains from shortest to longest to ensure proper nesting
         const docEntryPairs = Array.from(docEntries.entries());
 
-        // Sort by chain length to process shorter chains first
-        // This ensures parents are created before their children
         docEntryPairs.sort((a, b) => a[1].length - b[1].length);
 
-        // Process each document URI for this source
         for (const [docUri, chain] of docEntryPairs) {
-            // Extract the query label (use the last query in chain)
             const lastQuery = chain[chain.length - 1];
             const label = lastQuery ? lastQuery.query : "Unknown";
 
-            // Determine if this is a root chain or a subchain
-            // Start with assumption of being a root chain
             let bestParentDocUri = "";
             let maxMatchLength = 0;
 
-            // Find the best matching parent (the one with the longest matching prefix)
             for (const [otherDocUri, otherChain] of docEntries) {
                 if (otherDocUri !== docUri && chain.length > otherChain.length && otherChain.length > maxMatchLength) {
-                    // Check if otherChain is a prefix of this chain
                     let isPrefix = true;
                     for (let i = 0; i < otherChain.length; i++) {
                         if (JSON.stringify(otherChain[i]) !== JSON.stringify(chain[i])) {
@@ -202,7 +179,6 @@ function rebuildTreeViewFromState() {
                 }
             }
 
-            // Add to appropriate parent
             if (bestParentDocUri) {
                 chainGrepProvider.addSubChain(bestParentDocUri, label, chain, docUri);
             } else {
@@ -211,7 +187,6 @@ function rebuildTreeViewFromState() {
         }
     }
 
-    // Refresh the view to display the rebuilt tree
     chainGrepProvider.refresh();
 }
 
@@ -254,7 +229,6 @@ class ChainGrepNode extends vscode.TreeItem {
     }
 }
 
-// Override functions that change chain state to persist changes.
 class ChainGrepDataProvider implements vscode.TreeDataProvider<ChainGrepNode> {
     private _onDidChangeTreeData: vscode.EventEmitter<ChainGrepNode | undefined | void> = new vscode.EventEmitter();
     readonly onDidChangeTreeData: vscode.Event<ChainGrepNode | undefined | void> = this._onDidChangeTreeData.event;
@@ -367,10 +341,8 @@ class ChainGrepDataProvider implements vscode.TreeDataProvider<ChainGrepNode> {
     }
 
     removeNode(node: ChainGrepNode) {
-        // First, collect all nodes (the target and all its descendants) to be removed
         const nodesToRemove = this.collectNodeAndDescendants(node);
 
-        // Remove all collected nodes from docUriToNode, chainGrepMap, and chainGrepContents
         for (const nodeToRemove of nodesToRemove) {
             if (nodeToRemove.docUri) {
                 this.docUriToNode.delete(nodeToRemove.docUri);
@@ -379,16 +351,13 @@ class ChainGrepDataProvider implements vscode.TreeDataProvider<ChainGrepNode> {
             }
         }
 
-        // Remove the node from its parent's children array or from fileRoots if it's a root
         if (node.parent) {
             node.parent.children = node.parent.children.filter((c) => c !== node);
 
-            // If the parent now has no children, make it non-expandable
             if (node.parent.children.length === 0) {
                 node.parent.collapsibleState = vscode.TreeItemCollapsibleState.None;
             }
         } else if (node.docUri === undefined) {
-            // It's a file root node
             for (const [key, val] of this.fileRoots.entries()) {
                 if (val === node) {
                     this.fileRoots.delete(key);
@@ -401,7 +370,6 @@ class ChainGrepDataProvider implements vscode.TreeDataProvider<ChainGrepNode> {
         savePersistentState();
     }
 
-    // Helper method to collect a node and all its descendants
     private collectNodeAndDescendants(node: ChainGrepNode): ChainGrepNode[] {
         const result: ChainGrepNode[] = [node];
         for (const child of node.children) {
@@ -425,9 +393,7 @@ class ChainGrepFSProvider implements vscode.FileSystemProvider {
     onDidChangeFile: vscode.Event<vscode.FileChangeEvent[]>;
     private _onDidChangeFile: vscode.EventEmitter<vscode.FileChangeEvent[]>;
 
-    // Add a flag to track initialization status
     private initialized = false;
-    // Queue of URIs that were requested before initialization
     private pendingRequests: vscode.Uri[] = [];
 
     constructor() {
@@ -435,10 +401,8 @@ class ChainGrepFSProvider implements vscode.FileSystemProvider {
         this.onDidChangeFile = this._onDidChangeFile.event;
     }
 
-    // Mark the provider as initialized and process any pending requests
     public markInitialized(): void {
         this.initialized = true;
-        // Process any pending requests
         for (const uri of this.pendingRequests) {
             this._onDidChangeFile.fire([
                 {
@@ -457,12 +421,9 @@ class ChainGrepFSProvider implements vscode.FileSystemProvider {
     stat(uri: vscode.Uri): vscode.FileStat {
         const content = chainGrepContents.get(uri.toString());
 
-        // If the content doesn't exist but we're not initialized yet,
-        // queue this URI for later processing
         if (content === undefined) {
             if (!this.initialized) {
                 this.pendingRequests.push(uri);
-                // Return a placeholder stat - VSCode will retry once we fire the change event
                 return {
                     type: vscode.FileType.File,
                     ctime: Date.now(),
@@ -485,10 +446,7 @@ class ChainGrepFSProvider implements vscode.FileSystemProvider {
     readFile(uri: vscode.Uri): Uint8Array {
         const content = chainGrepContents.get(uri.toString());
 
-        // If we don't have the content yet but we have the chain info,
-        // generate it on-demand
         if (!content && chainGrepMap.has(uri.toString())) {
-            // Generate the content and fire a change event
             vscode.window.withProgress(
                 {
                     location: vscode.ProgressLocation.Notification,
@@ -496,7 +454,6 @@ class ChainGrepFSProvider implements vscode.FileSystemProvider {
                     cancellable: false,
                 },
                 async () => {
-                    // We need to do this asynchronously to avoid blocking the UI
                     const chainInfo = chainGrepMap.get(uri.toString())!;
                     const { lines, stats } = await executeChainSearch(chainInfo.sourceUri, chainInfo.chain);
                     const header = buildChainDetailedHeader(chainInfo.chain, stats);
@@ -507,12 +464,10 @@ class ChainGrepFSProvider implements vscode.FileSystemProvider {
                         newContent = lines.join("\n");
                     }
                     chainGrepContents.set(uri.toString(), newContent);
-                    // Notify that the file has changed
                     this._onDidChangeFile.fire([{ type: vscode.FileChangeType.Changed, uri }]);
                 }
             );
 
-            // Return empty content for now - VSCode will reload when we fire the change event
             return Buffer.from("Loading Chain Grep results...", "utf8");
         }
 
@@ -898,7 +853,6 @@ async function validateChain(queries: ChainGrepQuery[]): Promise<string[]> {
     return errors;
 }
 
-// Add statistics to search results
 async function executeChainSearch(
     sourceUri: vscode.Uri,
     chain: ChainGrepQuery[]
@@ -977,7 +931,6 @@ function getChainForEditor(editor: vscode.TextEditor): {
     return { chain: [], sourceUri: editor.document.uri };
 }
 
-// Update buildChainDetailedHeader to include statistics
 function buildChainDetailedHeader(chain: ChainGrepQuery[], stats?: any): string {
     const lines: string[] = ["--- Chain Grep Steps ---"];
     chain.forEach((q, i) => {
@@ -995,7 +948,6 @@ function buildChainDetailedHeader(chain: ChainGrepQuery[], stats?: any): string 
         }
         step += q.caseSensitive ? " (Case Sensitive)" : " (Case Insensitive)";
 
-        // Add statistics if available
         if (stats && stats.steps && stats.steps[i]) {
             step += ` → ${stats.steps[i].matchCount} matches`;
         }
@@ -1003,7 +955,6 @@ function buildChainDetailedHeader(chain: ChainGrepQuery[], stats?: any): string 
         lines.push(step);
     });
 
-    // Add summary statistics if available
     if (stats) {
         const finalCount = stats.steps.length > 0 ? stats.steps[stats.steps.length - 1].matchCount : 0;
         lines.push(
@@ -1031,7 +982,6 @@ function buildChainPath(chain: ChainGrepQuery[]): string {
         .join("->");
 }
 
-// Update the reporting in executeChainSearchAndDisplayResults to show statistics
 async function executeChainSearchAndDisplayResults(
     sourceUri: vscode.Uri,
     chain: ChainGrepQuery[],
@@ -1042,7 +992,6 @@ async function executeChainSearchAndDisplayResults(
     if (!results.length) {
         vscode.window.showInformationMessage("No matches found.");
     } else {
-        // Show a status message with result count
         vscode.window.setStatusBarMessage(
             `Chain Grep: Found ${results.length} matches (${((results.length / stats.totalLines) * 100).toFixed(
                 1
@@ -1051,7 +1000,6 @@ async function executeChainSearchAndDisplayResults(
         );
     }
 
-    // Create a detailed header with statistics
     const header = buildChainDetailedHeader(chain, stats);
     let content = "";
     if (isDetailedChainDocEnabled()) {
@@ -1205,10 +1153,8 @@ async function showQueryAndOptionsQuickInput(defaultQuery?: string) {
     });
 }
 
-// Modify the openNode function to regenerate content when needed
 async function openNode(node: ChainGrepNode) {
     if (node.docUri) {
-        // Check if we need to regenerate the content
         if (!chainGrepContents.has(node.docUri)) {
             const chainDoc = chainGrepMap.get(node.docUri);
             if (chainDoc) {
@@ -1244,9 +1190,7 @@ async function openNode(node: ChainGrepNode) {
     }
 }
 
-// Popraw funkcję closeNode, aby było jasne że usuwa też chainGrepMap
 async function closeNode(node: ChainGrepNode) {
-    // Ta funkcja usuwa węzeł z drzewa i kompletnie czyści wszystkie powiązane dane
     console.log("ChainGrep: Fully removing node and all data from tree");
     chainGrepProvider.removeNode(node);
 }
@@ -1286,25 +1230,19 @@ async function refreshAndOpen(node: ChainGrepNode) {
 
 const chainGrepProvider = new ChainGrepDataProvider();
 
-// Create a function to recover files that may have failed to open initially
 async function recoverFailedChainGrepFiles() {
-    // Get all visible text editors
     const visibleEditors = vscode.window.visibleTextEditors;
 
     for (const editor of visibleEditors) {
         const uri = editor.document.uri;
 
-        // Only process chaingrep scheme editors with empty/placeholder content
         if (uri.scheme === CHAIN_GREP_SCHEME) {
             const content = editor.document.getText();
             if (content === "Loading Chain Grep results..." || content === "") {
-                // If we have this URI in chainGrepMap but not in chainGrepContents,
-                // then we need to reload it
                 const uriStr = uri.toString();
                 if (chainGrepMap.has(uriStr) && !chainGrepContents.has(uriStr)) {
                     const chainInfo = chainGrepMap.get(uriStr)!;
 
-                    // Reload the file content
                     vscode.window.showInformationMessage("Recovering Chain Grep file...");
 
                     const { lines, stats } = await executeChainSearch(chainInfo.sourceUri, chainInfo.chain);
@@ -1316,10 +1254,8 @@ async function recoverFailedChainGrepFiles() {
                         newContent = lines.join("\n");
                     }
 
-                    // Update the content
                     chainGrepContents.set(uriStr, newContent);
 
-                    // Reload the editor
                     await vscode.commands.executeCommand("workbench.action.files.revert");
                 }
             }
@@ -1327,165 +1263,9 @@ async function recoverFailedChainGrepFiles() {
     }
 }
 
-// Add a cache for search operations on large files to prevent re-parsing
-const sourceDocCache = new Map<
-    string,
-    {
-        content: string[];
-        timestamp: number;
-    }
->();
-
-function getSourceDocContent(sourceDoc: vscode.TextDocument): string[] {
-    const uriStr = sourceDoc.uri.toString();
-    const docVersion = sourceDoc.version;
-    const cacheKey = `${uriStr}:${docVersion}`;
-
-    // Check if we have a cached version
-    const cached = sourceDocCache.get(cacheKey);
-    if (cached) {
-        return cached.content;
-    }
-
-    // Parse the document into lines
-    const lines: string[] = [];
-    for (let i = 0; i < sourceDoc.lineCount; i++) {
-        lines.push(sourceDoc.lineAt(i).text);
-    }
-
-    // Cache the result with a timestamp
-    sourceDocCache.set(cacheKey, {
-        content: lines,
-        timestamp: Date.now(),
-    });
-
-    // Cleanup old cache entries periodically
-    if (sourceDocCache.size > 20) {
-        // Keep only 10 most recent entries
-        const entries = Array.from(sourceDocCache.entries())
-            .sort((a, b) => b[1].timestamp - a[1].timestamp)
-            .slice(0, 10);
-        sourceDocCache.clear();
-        for (const [key, value] of entries) {
-            sourceDocCache.set(key, value);
-        }
-    }
-
-    return lines;
-}
-
-// Add a configurable setting for maximum result count to handle very large files
-function getMaxResultCount(): number {
-    const config = vscode.workspace.getConfiguration("chainGrep");
-    return config.get<number>("maxResultCount") || 10000;
-}
-
-// Add keyboard shortcut handlers for navigating results
-function registerResultNavigation() {
-    // Add commands for next/previous result
-    const nextResultCmd = vscode.commands.registerTextEditorCommand("chainGrep.nextResult", (editor) => {
-        // Implementation to navigate to next match
-        // This would require tracking current position in results
-    });
-
-    const prevResultCmd = vscode.commands.registerTextEditorCommand("chainGrep.previousResult", (editor) => {
-        // Implementation to navigate to previous match
-    });
-
-    return [nextResultCmd, prevResultCmd];
-}
-
-// Add an export/import feature
-function registerExportImportCommands(context: vscode.ExtensionContext) {
-    // Export command
-    const exportCmd = vscode.commands.registerCommand("chainGrep.exportChains", async () => {
-        const chainData = Array.from(chainGrepMap.entries()).map(([uri, data]) => ({
-            uri,
-            chain: data.chain,
-            sourceUri: data.sourceUri.toString(),
-        }));
-
-        if (chainData.length === 0) {
-            vscode.window.showInformationMessage("No chain grep data to export");
-            return;
-        }
-
-        try {
-            const exportData = JSON.stringify(chainData, null, 2);
-
-            // Ask for save location
-            const saveUri = await vscode.window.showSaveDialog({
-                filters: { "Chain Grep": ["chaingrep"] },
-                saveLabel: "Export Chain Grep Data",
-            });
-
-            if (saveUri) {
-                await vscode.workspace.fs.writeFile(saveUri, Buffer.from(exportData));
-                vscode.window.showInformationMessage(`Exported ${chainData.length} chain greps`);
-            }
-        } catch (error) {
-            vscode.window.showErrorMessage(`Failed to export: ${error}`);
-        }
-    });
-
-    // Import command
-    const importCmd = vscode.commands.registerCommand("chainGrep.importChains", async () => {
-        try {
-            // Ask for file
-            const fileUri = await vscode.window.showOpenDialog({
-                canSelectFiles: true,
-                canSelectFolders: false,
-                canSelectMany: false,
-                filters: { "Chain Grep": ["chaingrep"] },
-                openLabel: "Import Chain Grep Data",
-            });
-
-            if (!fileUri || fileUri.length === 0) {
-                return;
-            }
-
-            const fileContent = await vscode.workspace.fs.readFile(fileUri[0]);
-            const importData = JSON.parse(fileContent.toString());
-
-            // Validate and process import data
-            let importedCount = 0;
-            for (const item of importData) {
-                if (item.uri && item.chain && item.sourceUri) {
-                    try {
-                        const sourceUri = vscode.Uri.parse(item.sourceUri);
-                        // Check if source exists
-                        await vscode.workspace.fs.stat(sourceUri);
-
-                        chainGrepMap.set(item.uri, {
-                            chain: item.chain,
-                            sourceUri,
-                        });
-                        importedCount++;
-                    } catch (err) {
-                        // Source file doesn't exist, skip this item
-                        console.log(`Source not found for import: ${item.sourceUri}`);
-                    }
-                }
-            }
-
-            // Rebuild tree
-            rebuildTreeViewFromState();
-
-            vscode.window.showInformationMessage(`Imported ${importedCount} chain greps`);
-            savePersistentState();
-        } catch (error) {
-            vscode.window.showErrorMessage(`Failed to import: ${error}`);
-        }
-    });
-
-    context.subscriptions.push(exportCmd, importCmd);
-}
-
-// Dodaj funkcje konfiguracyjne
 function getCleanupInterval(): number {
     const config = vscode.workspace.getConfiguration("chainGrep");
     const minutes = config.get<number>("cleanupInterval") ?? 5;
-    // Konwertuj minuty na milisekundy
     return minutes * 60 * 1000;
 }
 
@@ -1494,20 +1274,16 @@ function isCleanupLoggingEnabled(): boolean {
     return config.get<boolean>("cleanupLogging") === true;
 }
 
-// Ulepsz funkcję cleanupUnusedResources aby używała ustawień logowania
 function cleanupUnusedResources(showNotifications: boolean = false): number {
-    // Znajdź zawartość, która nie ma odpowiednika w mapie łańcuchów i nie jest widoczna
     const visibleUris = vscode.window.visibleTextEditors.map((editor) => editor.document.uri.toString());
 
     let cleanedCount = 0;
 
-    // Wyczyść "osierocone" wpisy w chainGrepContents (takie, które nie mają wpisu w chainGrepMap)
     for (const contentUri of chainGrepContents.keys()) {
         if (!chainGrepMap.has(contentUri) && !visibleUris.includes(contentUri)) {
             chainGrepContents.delete(contentUri);
             cleanedCount++;
 
-            // Loguj tylko gdy logowanie jest włączone lub gdy pokazujemy powiadomienia
             if (isCleanupLoggingEnabled() || showNotifications) {
                 console.log(`ChainGrep: Cleaned up orphaned content: ${contentUri}`);
             }
@@ -1521,7 +1297,6 @@ function cleanupUnusedResources(showNotifications: boolean = false): number {
             console.log(`ChainGrep: Background cleanup removed ${cleanedCount} orphaned resources`);
         }
 
-        // Pokaż powiadomienie tylko jeśli tak skonfigurowano (np. dla ręcznego czyszczenia)
         if (showNotifications) {
             vscode.window.showInformationMessage(`Chain Grep: Cleaned up ${cleanedCount} orphaned resources`);
         }
@@ -1532,11 +1307,9 @@ function cleanupUnusedResources(showNotifications: boolean = false): number {
     return cleanedCount;
 }
 
-// Zmodyfikuj funkcję activate aby używała nowych ustawień dla interwału czyszczenia
 export function activate(context: vscode.ExtensionContext) {
     extensionContext = context;
 
-    // Create and register FS provider early
     const chainGrepFs = new ChainGrepFSProvider();
     context.subscriptions.push(
         vscode.workspace.registerFileSystemProvider(CHAIN_GREP_SCHEME, chainGrepFs, {
@@ -1546,34 +1319,27 @@ export function activate(context: vscode.ExtensionContext) {
 
     initGlobalHighlightDecorations();
 
-    // Load state immediately instead of using setTimeout
     loadPersistentState(context);
 
-    // Mark the FS provider as initialized after state is loaded
     chainGrepFs.markInitialized();
 
-    // Register the tree view *after* loading the state
     const treeView = vscode.window.createTreeView("chainGrepView", {
         treeDataProvider: chainGrepProvider,
         showCollapseAll: true,
     });
 
-    // This helps ensure the tree view refreshes properly on first display
     treeView.onDidChangeVisibility((e) => {
         if (e.visible) {
             chainGrepProvider.refresh();
 
-            // Try to recover any editors that might have opened before we were ready
             recoverFailedChainGrepFiles();
         }
     });
 
     context.subscriptions.push(treeView);
 
-    // Ciche czyszczenie zasobów na starcie (bez powiadomień)
     cleanupUnusedResources(false);
 
-    // Utwórz interwał czyszczenia tylko jeśli jest włączony (interval > 0)
     let cleanupInterval: NodeJS.Timeout | undefined;
     const intervalMs = getCleanupInterval();
 
@@ -1749,7 +1515,6 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
 
-    // Register the document close event handler properly
     const closeDocHandler = vscode.workspace.onDidCloseTextDocument((doc) => {
         const docUri = doc.uri;
 
@@ -1757,8 +1522,6 @@ export function activate(context: vscode.ExtensionContext) {
             const uriString = docUri.toString();
             console.log(`ChainGrep: Chain grep file closed: ${uriString}`);
 
-            // Usuwamy TYLKO zawartość pliku, aby oszczędzać pamięć
-            // ale ZACHOWUJEMY chainGrepMap aby historia była widoczna w drzewie
             const inContents = chainGrepContents.has(uriString);
 
             console.log(`ChainGrep: File exists in contents: ${inContents}`);
@@ -1775,7 +1538,6 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
 
-    // Podobna zmiana dla tabCloseListener - usuwa TYLKO zawartość
     const tabCloseListener = vscode.window.tabGroups.onDidChangeTabs((e) => {
         for (const tab of e.closed) {
             if (tab.input instanceof vscode.TabInputText) {
@@ -1785,7 +1547,6 @@ export function activate(context: vscode.ExtensionContext) {
                     const uriString = uri.toString();
                     console.log(`ChainGrep: Tab closed for document: ${uriString}`);
 
-                    // Usuwamy TYLKO zawartość pliku, aby oszczędzać pamięć
                     const inContents = chainGrepContents.has(uriString);
 
                     console.log(`ChainGrep: File exists in contents: ${inContents}`);
@@ -1827,12 +1588,9 @@ export function activate(context: vscode.ExtensionContext) {
         tabCloseListener
     );
 
-    // Keep the forceCleanup command but simplify it
     const forceCleanupCmd = vscode.commands.registerCommand("chainGrep.forceCleanup", async () => {
-        // Get all visible text editors' URIs
         const visibleUris = new Set(vscode.window.visibleTextEditors.map((editor) => editor.document.uri.toString()));
 
-        // Clean up any chaingrep contents that aren't visible
         let cleanedCount = 0;
         for (const contentUri of chainGrepContents.keys()) {
             if (isChainGrepUri(contentUri) && !visibleUris.has(contentUri)) {
@@ -1852,11 +1610,9 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(forceCleanupCmd);
 
-    // Dodaj obserwator zmian konfiguracji aby aktualizować interwał czyszczenia w czasie rzeczywistym
     context.subscriptions.push(
         vscode.workspace.onDidChangeConfiguration((e) => {
             if (e.affectsConfiguration("chainGrep.cleanupInterval")) {
-                // Aktualizuj interwał czyszczenia gdy zmieni się konfiguracja
                 if (cleanupInterval) {
                     clearInterval(cleanupInterval);
                     cleanupInterval = undefined;
@@ -1876,16 +1632,14 @@ export function activate(context: vscode.ExtensionContext) {
     );
 }
 
-// Keep the isChainGrepUri function as it's useful
 function isChainGrepUri(uri: string | vscode.Uri): boolean {
     if (typeof uri === "string") {
-        return uri.startsWith(`${CHAIN_GREP_SCHEME}:/`); // Jeden slash
+        return uri.startsWith(`${CHAIN_GREP_SCHEME}:/`);
     } else {
         return uri.scheme === CHAIN_GREP_SCHEME;
     }
 }
 
-// Modify deactivate to save persistent state.
 export function deactivate() {
     cleanupUnusedResources();
     savePersistentState();
