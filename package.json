@@ -1,10 +1,10 @@
 {
     "publisher": "rejzerek",
-    "name": "chain-grep",
-    "displayName": "Chain Grep",
+    "name": "chain-grep-dev",
+    "displayName": "Chain Grep DEV",
     "description": "Chain Grep enables chained text, regex searches and text highlighting in VS Code — refine your results step by step and refresh the entire chain when the source updates.",
     "icon": "icon.png",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "engines": {
         "vscode": "^1.85.2"
     },
@@ -15,7 +15,10 @@
     "categories": [
         "Other"
     ],
-    "activationEvents": [],
+    "activationEvents": [
+        "onStartupFinished",
+        "onFileSystem:chaingrep"
+    ],
     "main": "./dist/extension.js",
     "contributes": {
         "commands": [
@@ -64,6 +67,30 @@
                 "command": "_chainGrep.refreshAndOpenNode",
                 "title": "Refresh & Open",
                 "icon": "$(sync)"
+            },
+            {
+                "command": "chainGrep.recoverFiles",
+                "title": "Chain Grep: Recover Lost Files"
+            },
+            {
+                "command": "chainGrep.nextResult",
+                "title": "Chain Grep: Go to Next Result"
+            },
+            {
+                "command": "chainGrep.previousResult",
+                "title": "Chain Grep: Go to Previous Result"
+            },
+            {
+                "command": "chainGrep.exportChains",
+                "title": "Chain Grep: Export Chain Configurations"
+            },
+            {
+                "command": "chainGrep.importChains",
+                "title": "Chain Grep: Import Chain Configurations"
+            },
+            {
+                "command": "chainGrep.forceCleanup",
+                "title": "Chain Grep: Force Memory Cleanup"
             }
         ],
         "keybindings": [
@@ -74,8 +101,18 @@
             },
             {
                 "command": "chainGrep.toggleHighlight",
-                "key": "ctrl+alt+m",
+                "key": "ctrl+alt+,",
                 "when": "editorTextFocus"
+            },
+            {
+                "command": "chainGrep.nextResult",
+                "key": "ctrl+alt+.",
+                "when": "editorTextFocus && editorLangId == 'chaingrep'"
+            },
+            {
+                "command": "chainGrep.previousResult",
+                "key": "ctrl+alt+up",
+                "when": "editorTextFocus && editorLangId == 'chaingrep'"
             }
         ],
         "viewsContainers": {
@@ -108,6 +145,41 @@
                     "group": "inline@50"
                 }
             ]
+        },
+        "configuration": {
+            "title": "Chain Grep",
+            "properties": {
+                "chainGrep.colours": {
+                    "type": "string",
+                    "default": "#89CFF0:black, #FF6961:black, #77DD77:black, #C3A8FF:black, #FDFD96:black, #A0E7E5:black, #FFB7CE:black, #CCFF90:black, #B19CD9:black, #FF82A9:black, #A8BFFF:black, #FFDAB9:black, #A8D0FF:black, #FFE680:black, #A8E0FF:black, #FFCBA4:black, #E6A8D7:black, #FFCCD2:black, #ACE1AF:black, #FF99FF:black",
+                    "description": "Comma-separated list of background:foreground color pairs for highlights."
+                },
+                "chainGrep.randomColors": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Use a randomized order for highlight colors."
+                },
+                "chainGrep.detailedChainDoc": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Include detailed chain information in result documents."
+                },
+                "chainGrep.maxResultCount": {
+                    "type": "number",
+                    "default": 10000,
+                    "description": "Maximum number of lines to process in results (for performance)."
+                },
+                "chainGrep.cleanupInterval": {
+                    "type": "number",
+                    "default": 5,
+                    "description": "How often to clean up orphaned resources (in minutes). Set to 0 to disable automatic cleanup."
+                },
+                "chainGrep.cleanupLogging": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Whether to log cleanup operations to the console."
+                }
+            }
         }
     },
     "scripts": {
