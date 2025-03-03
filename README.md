@@ -1,18 +1,25 @@
 # CHAIN GREP
 
-**Chain Grep** is a Visual Studio Code extension that lets you build and execute a sequence of chained text or regex searches on any source file. You can progressively refine your search results, refresh them when the file changes, and highlight text or other snippets. This makes it perfect for searching logs, debugging output, or any other text files. The extension also provides a simple popup that accepts your query along with toggle options for "Invert" and "Case Sensitive." In addition, you can quickly grep selected text using a custom keybinding.
+**Chain Grep** is a Visual Studio Code extension that lets you build and execute a sequence of chained text or regex searches on any source file. You can progressively refine your search results, refresh them when the file changes, and highlight text or other snippets. This makes it perfect for searching logs, debugging output, or any other text files. The extension provides an intuitive search interface with clear visual indication of search modes and options. In addition, you can quickly grep selected text using a custom keybinding.
 
 ## Key Features
 
 -   **Chained Searches**: Combine multiple searches (text or regex) in a chain, each refining the results of the previous step.
 -   **Custom Popup**: A minimal QuickPick-based interface for entering your query and toggling "Invert" or "Case Sensitive".
 -   **Selection Shortcut**: Press `CTRL+ALT+G` (or your custom keybinding) to grep any currently selected text.
--   **Results in a Separate Document**: Each chain’s results appear in a new document, which can show just the matches or include a more detailed log, depending on your settings.
--   **Activity Bar Tree**: The extension displays a tree in the Activity Bar, showing each file’s chain entries. You can expand, open, or close nodes, making it easy to navigate multiple chain results.
--   **Highlighting**: Toggle highlights for any string or special character, with persistent highlights across file switches.
--   **Global vs Chained Highlighting**: Local (chained) highlights are specific to the current chain doc, whereas global highlights remain visible across your entire workspace.
+-   **Results in a Separate Document**: Each chain's results appear in a new document, which can show just the matches or include a more detailed log, depending on your settings.
+-   **Activity Bar Tree**: The extension displays a tree in the Activity Bar, showing each file's chain entries. You can expand, open, or close nodes, making it easy to navigate multiple chain results.
+-   **Highlighting System**:
+    -   Toggle highlights for any string or special character
+    -   Persistent highlights across file switches
+    -   Local (chained) highlights specific to related files
+    -   Global highlights visible across your entire workspace
+    -   Quick clear buttons for all highlight types
+-   **Results Management**: Easily manage all search results with one-click options to close all results or clear all highlights.
 -   **Automatic Re-Highlighting**: Whenever you return to a file, any highlights you had before are restored.
 -   **Easy Refresh**: The "Chain Grep: Refresh" command reverts the source file from disk (pulling in external changes, if any) and reapplies the entire chain.
+-   **Smart Memory Management**: Automatic cleanup of unused resources with configurable intervals.
+-   **Theme-Aware Icons**: All icons adapt automatically to light and dark themes for a consistent look.
 -   **Optional Multiline Regex**: When using regex, the extension can optionally apply `s` (dotall) flag automatically.
 -   **Optional Random Color Palette**: If enabled, highlights are generated from a user-defined palette in random order.
 
@@ -20,20 +27,23 @@
 
 ### Commands
 
--   **Chain Grep: Find Text**: Opens the popup for a plain-text query.
--   **Chain Grep: Find Regex**: Opens the popup for a regex query.
+-   **Chain Grep: Grep Text**: Opens the popup for a plain-text query with clear interface indicators.
+-   **Chain Grep: Grep Regex**: Opens the popup for a regex query with syntax hints and pattern examples.
 -   **Chain Grep: Grep Selection**: Prefills the popup with your selection and executes a text search.
 -   **Chain Grep: Refresh**: Re-runs the search chain on the updated source file.
 -   **Chain Grep: Toggle Chained Highlight**: Toggles highlighting for the selection or word under the cursor for chained files.
--   **Chain Grep: Clear Chained Highlights**: Removes all chained highlights.
+-   **Chain Grep: Clear Chained Highlights**: Removes all chained highlights for the current file.
 -   **Chain Grep: Toggle Global Highlight**: Toggles highlighting for the selection or word under the cursor globally.
 -   **Chain Grep: Clear Global Highlights**: Removes all global highlights.
+-   **Chain Grep: Clear Chained Highlights (All Files)**: Removes all chained highlights across all files at once.
+-   **Chain Grep: Close All Results**: Closes all search result documents and cleans up the tree view.
+-   **Chain Grep: Force Memory Cleanup**: Manually triggers cleanup of unused resources when needed.
 
 ### Typical Workflow
 
 1. Open a file in VS Code.
-2. Use a Chain Grep command (e.g., "Find Text") to open the QuickPick.
-3. Enter your query and set toggles.
+2. Use a Chain Grep command (e.g., "Grep Text" or "Grep Regex") to open the context-aware QuickPick.
+3. Enter your query and toggle options using the visual indicators.
 4. A new document displays the results.
 5. Check the Activity Bar to see a list of chain entries per file.
 6. If the source file changes, use **Chain Grep: Refresh**.

@@ -1,9 +1,9 @@
 {
     "publisher": "rejzerek",
-    "name": "chain-grep-dev",
-    "displayName": "Chain Grep DEV",
+    "name": "chain-grep",
+    "displayName": "Chain Grep",
     "description": "Chain Grep enables chained text, regex searches and text highlighting in VS Code — refine your results step by step and refresh the entire chain when the source updates.",
-    "icon": "icon.png",
+    "icon": "icons/icon.png",
     "version": "0.1.1",
     "engines": {
         "vscode": "^1.85.2"
@@ -71,6 +71,27 @@
             {
                 "command": "chainGrep.forceCleanup",
                 "title": "Chain Grep: Force Memory Cleanup"
+            },
+            {
+                "command": "chainGrep.closeAllNodes",
+                "title": "Chain Grep: Close All Results",
+                "icon": "$(clear-all)"
+            },
+            {
+                "command": "chainGrep.clearAllLocalHighlights",
+                "title": "Chain Grep: Clear Chained Highlights (All Files)",
+                "icon": {
+                    "light": "icons/light/remove-chained-highlights.svg",
+                    "dark": "icons/dark/remove-chained-highlights.svg"
+                }
+            },
+            {
+                "command": "_chainGrep.clearAllGlobalHighlights",
+                "title": "Chain Grep: Clear Global Highlights",
+                "icon": {
+                    "light": "icons/light/remove-global-highlights.svg",
+                    "dark": "icons/dark/remove-global-highlights.svg"
+                }
             }
         ],
         "keybindings": [
@@ -81,7 +102,7 @@
             },
             {
                 "command": "chainGrep.toggleHighlight",
-                "key": "ctrl+alt+,",
+                "key": "ctrl+alt+m",
                 "when": "editorTextFocus"
             }
         ],
@@ -90,7 +111,7 @@
                 {
                     "id": "chainGrepViewContainer",
                     "title": "Chain Grep",
-                    "icon": "chain-grep-icon.svg"
+                    "icon": "icons/chain-grep-icon.svg"
                 }
             ]
         },
@@ -102,7 +123,48 @@
                 }
             ]
         },
+        "viewsWelcome": [
+            {
+                "view": "chainGrepView",
+                "contents": "No chain grep results yet.\n\nUse the following commands to start:\n\n[Grep Text](command:chainGrep.grepText)\n[Grep Regex](command:chainGrep.grepRegex)\n[Grep Selection](command:chainGrep.grepSelection)"
+            }
+        ],
         "menus": {
+            "commandPalette": [
+                {
+                    "command": "_chainGrep.clearAllGlobalHighlights",
+                    "when": "false"
+                },
+                {
+                    "command": "_chainGrep.openNode",
+                    "when": "false"
+                },
+                {
+                    "command": "_chainGrep.closeNode",
+                    "when": "false"
+                },
+                {
+                    "command": "_chainGrep.refreshAndOpenNode",
+                    "when": "false"
+                }
+            ],
+            "view/title": [
+                {
+                    "command": "chainGrep.closeAllNodes",
+                    "when": "view == chainGrepView",
+                    "group": "navigation@3"
+                },
+                {
+                    "command": "chainGrep.clearAllLocalHighlights",
+                    "when": "view == chainGrepView",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "_chainGrep.clearAllGlobalHighlights",
+                    "when": "view == chainGrepView",
+                    "group": "navigation@2"
+                }
+            ],
             "view/item/context": [
                 {
                     "command": "_chainGrep.refreshAndOpenNode",
