@@ -119,14 +119,15 @@
             "chainGrepViewContainer": [
                 {
                     "id": "chainGrepView",
-                    "name": "Chain Grep"
+                    "name": "Chain Grep",
+                    "icon": "icons/chain-grep-icon.svg"
                 }
             ]
         },
         "viewsWelcome": [
             {
                 "view": "chainGrepView",
-                "contents": "No chain grep results yet.\n\nUse the following commands to start:\n\n[Grep Text](command:chainGrep.grepText)\n[Grep Regex](command:chainGrep.grepRegex)\n[Grep Selection](command:chainGrep.grepSelection)"
+                "contents": "No chain grep results yet.\n\nOpen some file and use the following commands to start:\n\n[Grep Text](command:chainGrep.grepText)\n[Grep Regex](command:chainGrep.grepRegex)\n[Grep Selection](command:chainGrep.grepSelection)"
             }
         ],
         "menus": {
@@ -150,11 +151,6 @@
             ],
             "view/title": [
                 {
-                    "command": "chainGrep.closeAllNodes",
-                    "when": "view == chainGrepView",
-                    "group": "navigation@3"
-                },
-                {
                     "command": "chainGrep.clearAllLocalHighlights",
                     "when": "view == chainGrepView",
                     "group": "navigation@1"
@@ -163,6 +159,11 @@
                     "command": "_chainGrep.clearAllGlobalHighlights",
                     "when": "view == chainGrepView",
                     "group": "navigation@2"
+                },
+                {
+                    "command": "chainGrep.closeAllNodes",
+                    "when": "view == chainGrepView",
+                    "group": "navigation@3"
                 }
             ],
             "view/item/context": [
@@ -215,6 +216,11 @@
                     "type": "number",
                     "default": 30,
                     "description": "Maximum length of chain descriptor in result documents. Set to 0 to disable truncation."
+                },
+                "chainGrep.showScrollbarIndicators": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Show highlight indicators in the scrollbar (overview ruler)."
                 }
             }
         }

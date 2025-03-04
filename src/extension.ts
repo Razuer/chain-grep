@@ -540,14 +540,22 @@ function initGlobalHighlightDecorations() {
     globalHighlightDecorations = [];
     globalHighlightWords = [];
 
+    const showScrollbarIndicators = areScrollbarIndicatorsEnabled();
+
     globalColoursArr.forEach(([bg, fg]) => {
-        globalHighlightDecorations.push(
-            vscode.window.createTextEditorDecorationType({
-                backgroundColor: bg,
-                color: fg,
-                borderRadius: "4px",
-            })
-        );
+        const decorationOptions: vscode.DecorationRenderOptions = {
+            backgroundColor: bg,
+            color: fg,
+            borderRadius: "4px",
+            isWholeLine: false,
+        };
+
+        if (showScrollbarIndicators) {
+            decorationOptions.overviewRulerColor = bg;
+            decorationOptions.overviewRulerLane = vscode.OverviewRulerLane.Right;
+        }
+
+        globalHighlightDecorations.push(vscode.window.createTextEditorDecorationType(decorationOptions));
         globalHighlightWords.push(undefined);
     });
 
@@ -727,13 +735,24 @@ function createHighlightDecorationsFromColours(): vscode.TextEditorDecorationTyp
     if (areRandomColorsEnabled()) {
         coloursArr = shuffleArray(coloursArr);
     }
-    return coloursArr.map(([bg, fg]) =>
-        vscode.window.createTextEditorDecorationType({
+
+    const showScrollbarIndicators = areScrollbarIndicatorsEnabled();
+
+    return coloursArr.map(([bg, fg]) => {
+        const decorationOptions: vscode.DecorationRenderOptions = {
             backgroundColor: bg,
             color: fg,
             borderRadius: "4px",
-        })
-    );
+            isWholeLine: false,
+        };
+
+        if (showScrollbarIndicators) {
+            decorationOptions.overviewRulerColor = bg;
+            decorationOptions.overviewRulerLane = vscode.OverviewRulerLane.Right;
+        }
+
+        return vscode.window.createTextEditorDecorationType(decorationOptions);
+    });
 }
 
 function getLocalHighlightKey(docUri: string): string {
@@ -1416,6 +1435,11 @@ function clearAllLocalHighlights() {
     }
 }
 
+function areScrollbarIndicatorsEnabled(): boolean {
+    const config = vscode.workspace.getConfiguration("chainGrep");
+    return config.get<boolean>("showScrollbarIndicators") !== false; // Default to true if not specified
+}
+
 export function activate(context: vscode.ExtensionContext) {
     extensionContext = context;
 
@@ -1744,6 +1768,32 @@ export function activate(context: vscode.ExtensionContext) {
                 } else if (isCleanupLoggingEnabled()) {
                     console.log(`ChainGrep: Automatic cleanup disabled`);
                 }
+            }
+
+            // Recreate all highlight decorations when scrollbar indicator setting changes
+            if (e.affectsConfiguration("chainGrep.showScrollbarIndicators")) {
+                // Reinitialize all decorations
+                const oldGlobalWords = [...globalHighlightWords];
+
+                // Recreate global decorations
+                initGlobalHighlightDecorations();
+
+                // Restore global words
+                oldGlobalWords.forEach((word, idx) => {
+                    if (idx < globalHighlightWords.length) {
+                        globalHighlightWords[idx] = word;
+                    }
+                });
+
+                // Refresh all local highlights
+                localHighlightMap.forEach((state, key) => {
+                    const words = [...state.words];
+                    const newState = getLocalHighlightState(key);
+                    newState.words = words;
+                });
+
+                // Reapply all highlights
+                applyHighlightsToOpenEditors();
             }
         })
     );
