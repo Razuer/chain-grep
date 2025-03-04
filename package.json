@@ -205,6 +205,16 @@
                     "type": "boolean",
                     "default": false,
                     "description": "Whether to log cleanup operations to the console."
+                },
+                "chainGrep.maxBaseNameLength": {
+                    "type": "number",
+                    "default": 70,
+                    "description": "Maximum length of source filename in result documents. Set to 0 to disable truncation."
+                },
+                "chainGrep.maxChainDescriptorLength": {
+                    "type": "number",
+                    "default": 30,
+                    "description": "Maximum length of chain descriptor in result documents. Set to 0 to disable truncation."
                 }
             }
         }

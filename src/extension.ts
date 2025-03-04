@@ -366,6 +366,16 @@ function isCleanupLoggingEnabled(): boolean {
     return config.get<boolean>("cleanupLogging") === true;
 }
 
+function getMaxBaseNameLength(): number {
+    const config = vscode.workspace.getConfiguration("chainGrep");
+    return config.get<number>("maxBaseNameLength") ?? 70;
+}
+
+function getMaxChainDescriptorLength(): number {
+    const config = vscode.workspace.getConfiguration("chainGrep");
+    return config.get<number>("maxChainDescriptorLength") ?? 30;
+}
+
 function isChainGrepUri(uri: string | vscode.Uri): boolean {
     if (typeof uri === "string") {
         return uri.startsWith(`${CHAIN_GREP_SCHEME}:/`);
@@ -1056,11 +1066,23 @@ async function executeChainSearchAndDisplayResults(
 
     const chainDescriptor = buildChainPath(chain);
 
-    let docName = `[${baseName}] : ${chainDescriptor}${extension}`;
+    // Get max length settings
+    const maxBaseNameLength = getMaxBaseNameLength();
+    const maxChainDescriptorLength = getMaxChainDescriptorLength();
 
-    if (docName.length > 60) {
-        docName = docName.slice(0, 60) + "..." + extension;
-    }
+    // Truncate the source filename if too long and truncation is enabled
+    const truncatedBaseName =
+        maxBaseNameLength > 0 && baseName.length > maxBaseNameLength
+            ? "..." + baseName.slice(baseName.length - maxBaseNameLength)
+            : baseName;
+
+    // Truncate the chain descriptor from the left if too long and truncation is enabled
+    const truncatedChainDescriptor =
+        maxChainDescriptorLength > 0 && chainDescriptor.length > maxChainDescriptorLength
+            ? "..." + chainDescriptor.slice(chainDescriptor.length - maxChainDescriptorLength)
+            : chainDescriptor;
+
+    let docName = `[${truncatedBaseName}] : ${truncatedChainDescriptor}${extension}`;
 
     const docUri = vscode.Uri.parse(`${CHAIN_GREP_SCHEME}:///${docName}`);
 
