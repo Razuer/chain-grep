@@ -336,6 +336,15 @@ let globalHighlightDecorations: vscode.TextEditorDecorationType[] = [];
 let globalHighlightWords: (string | undefined)[] = [];
 let globalNextHighlight = 0;
 
+// Add a mapping to remember which text was assigned which color
+let globalHighlightColorMap: Map<string, number> = new Map();
+// Local highlight color map will be stored per group key
+const localHighlightColorMaps: Map<string, Map<string, number>> = new Map();
+
+// Add color index arrays to maintain the mapping between original colors and shuffled ones
+let globalColorIndexes: number[] = [];
+const localColorIndexMaps: Map<string, number[]> = new Map();
+
 const chainGrepMap: Map<string, ChainGrepChain> = new Map();
 const chainGrepContents: Map<string, string> = new Map();
 const localHighlightMap = new Map<string, LocalHighlightState>();
@@ -403,6 +412,80 @@ function debounce<F extends (...args: any[]) => any>(func: F, waitFor: number): 
     };
 }
 
+// Modify the ColorQueue class to support different queue behavior based on randomColors
+
+class ColorQueue {
+    private indexes: number[];
+    private isRandom: boolean;
+
+    constructor(length: number, isRandom: boolean = false) {
+        this.indexes = Array.from({ length }, (_, i) => i);
+        this.isRandom = isRandom;
+
+        if (isRandom) {
+            this.indexes = shuffleArray([...this.indexes]);
+        }
+    }
+
+    public getNextIndex(): number {
+        // Get the first index from the queue
+        const index = this.indexes.shift();
+
+        if (index === undefined) {
+            return 0; // Shouldn't happen, but just in case
+        }
+
+        // Put the index at the end of the queue
+        this.indexes.push(index);
+
+        return index;
+    }
+
+    // Add a new method to handle releasing an index
+    public releaseIndex(index: number): void {
+        // Find and remove the index from wherever it is in the queue
+        const indexPosition = this.indexes.indexOf(index);
+        if (indexPosition >= 0) {
+            this.indexes.splice(indexPosition, 1);
+        }
+
+        // For non-random mode (sequential colors), released indexes go to the front
+        // This ensures the same color will be assigned next time
+        if (!this.isRandom) {
+            this.indexes.unshift(index);
+        } else {
+            // For random mode, released indexes go to the back of the queue
+            this.indexes.push(index);
+        }
+    }
+
+    public setRandom(isRandom: boolean): void {
+        if (this.isRandom !== isRandom) {
+            this.isRandom = isRandom;
+
+            // Create a fresh set of indexes
+            const length = this.indexes.length;
+            this.indexes = Array.from({ length }, (_, i) => i);
+
+            if (isRandom) {
+                this.indexes = shuffleArray([...this.indexes]);
+            }
+        }
+    }
+
+    public getIndexes(): number[] {
+        return [...this.indexes];
+    }
+
+    public setIndexes(indexes: number[]): void {
+        this.indexes = [...indexes];
+    }
+}
+
+// Global and local color queues
+let globalColorQueue: ColorQueue;
+const localColorQueues = new Map<string, ColorQueue>();
+
 const debouncedSavePersistentState = debounce(() => {
     const chainData = Array.from(chainGrepMap.entries()).map(([uri, data]) => [
         uri,
@@ -412,10 +495,19 @@ const debouncedSavePersistentState = debounce(() => {
 
     const persistentHighlights = {
         globalHighlightWords,
+        globalHighlightColorMap: Array.from(globalHighlightColorMap.entries()),
+        globalColorIndexes,
         localHighlights: Array.from(localHighlightMap.entries()).map(([key, state]) => [
             key,
             { words: state.words, next: state.next },
         ]),
+        localHighlightColorMaps: Array.from(localHighlightColorMaps.entries()).map(([key, map]) => [
+            key,
+            Array.from(map.entries()),
+        ]),
+        localColorIndexMaps: Array.from(localColorIndexMaps.entries()),
+        globalColorQueue: globalColorQueue ? globalColorQueue.getIndexes() : [],
+        localColorQueues: Array.from(localColorQueues.entries()).map(([key, queue]) => [key, queue.getIndexes()]),
     };
 
     extensionContext.workspaceState.update("chainGrepState", {
@@ -459,6 +551,40 @@ function loadPersistentState(context: vscode.ExtensionContext) {
                 const state = getLocalHighlightState(key);
                 state.words = stateObj.words;
                 state.next = stateObj.next;
+            }
+        }
+        if (stored.persistentHighlights.globalHighlightColorMap) {
+            globalHighlightColorMap = new Map(stored.persistentHighlights.globalHighlightColorMap);
+        }
+
+        if (stored.persistentHighlights.localHighlightColorMaps) {
+            for (const [key, mapData] of stored.persistentHighlights.localHighlightColorMaps) {
+                localHighlightColorMaps.set(key, new Map(mapData));
+            }
+        }
+
+        if (stored.persistentHighlights.globalColorIndexes) {
+            globalColorIndexes = stored.persistentHighlights.globalColorIndexes;
+        }
+
+        if (stored.persistentHighlights.localColorIndexMaps) {
+            for (const [key, indexes] of stored.persistentHighlights.localColorIndexMaps) {
+                localColorIndexMaps.set(key, indexes);
+            }
+        }
+
+        if (stored.persistentHighlights.globalColorQueue) {
+            if (!globalColorQueue) {
+                globalColorQueue = new ColorQueue(globalHighlightDecorations.length, areRandomColorsEnabled());
+            }
+            globalColorQueue.setIndexes(stored.persistentHighlights.globalColorQueue);
+        }
+
+        if (stored.persistentHighlights.localColorQueues) {
+            for (const [key, indexes] of stored.persistentHighlights.localColorQueues) {
+                const queue = localColorQueues.get(key) || new ColorQueue(indexes.length, areRandomColorsEnabled());
+                queue.setIndexes(indexes);
+                localColorQueues.set(key, queue);
             }
         }
     }
@@ -534,14 +660,16 @@ function initGlobalHighlightDecorations() {
             .split(":")
             .map((c) => c.trim())
     );
-    if (areRandomColorsEnabled()) {
-        globalColoursArr = shuffleArray(globalColoursArr);
-    }
+
     globalHighlightDecorations = [];
     globalHighlightWords = [];
 
+    // Create the global color queue
+    globalColorQueue = new ColorQueue(globalColoursArr.length, areRandomColorsEnabled());
+
     const showScrollbarIndicators = areScrollbarIndicatorsEnabled();
 
+    // Create decorations in the original order
     globalColoursArr.forEach(([bg, fg]) => {
         const decorationOptions: vscode.DecorationRenderOptions = {
             backgroundColor: bg,
@@ -566,35 +694,31 @@ function escapeRegExp(input: string): string {
     return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+// Replace chooseNextGlobalHighlight with a version that uses the queue
 function chooseNextGlobalHighlight(): number {
-    let idx = globalNextHighlight;
-    const start = globalNextHighlight;
-    do {
-        if (!globalHighlightWords[idx]) {
-            globalNextHighlight = idx - 1;
-            if (globalNextHighlight < 0) {
-                globalNextHighlight = globalHighlightDecorations.length - 1;
-            }
-            return idx;
-        }
-        idx -= 1;
-        if (idx < 0) {
-            idx = globalHighlightDecorations.length - 1;
-        }
-    } while (idx !== start);
+    return globalColorQueue.getNextIndex();
+}
 
-    const ret = globalNextHighlight;
-    globalNextHighlight = ret - 1;
-    if (globalNextHighlight < 0) {
-        globalNextHighlight = globalHighlightDecorations.length - 1;
+// Replace chooseNextLocalHighlight with a version that uses the queue
+function chooseNextLocalHighlight(groupKey: string): number {
+    if (!localColorQueues.has(groupKey)) {
+        // This shouldn't happen because we create the queue in getLocalHighlightState
+        // but just in case
+        const state = getLocalHighlightState(groupKey);
+        localColorQueues.set(groupKey, new ColorQueue(state.decorations.length, areRandomColorsEnabled()));
     }
-    return ret;
+
+    return localColorQueues.get(groupKey)!.getNextIndex();
 }
 
 function addHighlightGlobal(editor: vscode.TextEditor, text: string) {
     removeHighlightForTextGlobal(text);
+
+    // Get next color index from the queue
     const idx = chooseNextGlobalHighlight();
+
     globalHighlightWords[idx] = text;
+    globalHighlightColorMap.set(text, idx);
     applyHighlightForTextGlobal(editor, text, idx);
     savePersistentState();
 }
@@ -612,6 +736,7 @@ function applyHighlightForTextGlobal(editor: vscode.TextEditor, text: string, id
     editor.setDecorations(globalHighlightDecorations[idx], decorationOptions);
 }
 
+// Update removeHighlightForTextGlobal to use releaseIndex
 function removeHighlightForTextGlobal(text: string) {
     const idx = globalHighlightWords.findIndex((w) => w === text);
     if (idx === -1) {
@@ -621,6 +746,12 @@ function removeHighlightForTextGlobal(text: string) {
         ed.setDecorations(globalHighlightDecorations[idx], []);
     }
     globalHighlightWords[idx] = undefined;
+
+    // Release the color back to the queue when a highlight is removed
+    if (globalColorQueue) {
+        globalColorQueue.releaseIndex(idx);
+    }
+
     savePersistentState();
 }
 
@@ -643,6 +774,7 @@ function toggleHighlightGlobal() {
     reapplyAllGlobalHighlights();
 }
 
+// Reset color queues when clearing all highlights
 function clearHighlightsGlobal(showMessage = true) {
     if (globalHighlightWords.every((w) => w === undefined)) {
         if (showMessage) {
@@ -657,7 +789,13 @@ function clearHighlightsGlobal(showMessage = true) {
         });
     }
     globalHighlightWords.fill(undefined);
-    globalNextHighlight = globalHighlightDecorations.length - 1;
+    globalHighlightColorMap.clear(); // Clear the color map
+
+    // Reset the global color queue when cleared
+    if (globalColorQueue) {
+        globalColorQueue = new ColorQueue(globalHighlightDecorations.length, areRandomColorsEnabled());
+    }
+
     savePersistentState();
 
     if (showMessage) {
@@ -713,7 +851,7 @@ function getSelectedTextOrWord(editor: vscode.TextEditor): string | undefined {
 function getLocalHighlightState(groupKey: string): LocalHighlightState {
     let existing = localHighlightMap.get(groupKey);
     if (!existing) {
-        const newDecs = createHighlightDecorationsFromColours();
+        const newDecs = createHighlightDecorationsFromColours(groupKey);
         existing = {
             decorations: newDecs,
             words: new Array(newDecs.length).fill(undefined),
@@ -724,7 +862,7 @@ function getLocalHighlightState(groupKey: string): LocalHighlightState {
     return existing;
 }
 
-function createHighlightDecorationsFromColours(): vscode.TextEditorDecorationType[] {
+function createHighlightDecorationsFromColours(groupKey: string): vscode.TextEditorDecorationType[] {
     let palette = loadConfiguredPalette();
     let coloursArr = palette.split(",").map((pair) =>
         pair
@@ -732,12 +870,13 @@ function createHighlightDecorationsFromColours(): vscode.TextEditorDecorationTyp
             .split(":")
             .map((c) => c.trim())
     );
-    if (areRandomColorsEnabled()) {
-        coloursArr = shuffleArray(coloursArr);
-    }
+
+    // Create a color queue for this group key
+    localColorQueues.set(groupKey, new ColorQueue(coloursArr.length, areRandomColorsEnabled()));
 
     const showScrollbarIndicators = areScrollbarIndicatorsEnabled();
 
+    // Create decorations in the original order
     return coloursArr.map(([bg, fg]) => {
         const decorationOptions: vscode.DecorationRenderOptions = {
             backgroundColor: bg,
@@ -763,26 +902,23 @@ function getLocalHighlightKey(docUri: string): string {
     return docUri;
 }
 
-function chooseNextLocalHighlight(state: LocalHighlightState): number {
-    const start = state.next;
-    let idx = start;
-    do {
-        if (!state.words[idx]) {
-            return idx;
-        }
-        idx = (idx + 1) % state.decorations.length;
-    } while (idx !== start);
-    return idx;
-}
-
 function addHighlightLocal(editor: vscode.TextEditor, text: string) {
     const docUri = editor.document.uri.toString();
     const groupKey = getLocalHighlightKey(docUri);
     const state = getLocalHighlightState(groupKey);
+
     removeHighlightForTextLocal(docUri, text);
-    const idx = chooseNextLocalHighlight(state);
+
+    // Get next color index from the queue
+    const idx = chooseNextLocalHighlight(groupKey);
+
     state.words[idx] = text;
-    state.next = (idx + 1) % state.decorations.length;
+
+    if (!localHighlightColorMaps.has(groupKey)) {
+        localHighlightColorMaps.set(groupKey, new Map<string, number>());
+    }
+    localHighlightColorMaps.get(groupKey)!.set(text, idx);
+
     applyHighlightForTextLocal(editor, text, idx);
     savePersistentState();
 }
@@ -820,6 +956,7 @@ function applyHighlightForTextLocal(editor: vscode.TextEditor, text: string, idx
     }
 }
 
+// Update removeHighlightForTextLocal to use releaseIndex
 function removeHighlightForTextLocal(docUri: string, text: string) {
     const groupKey = getLocalHighlightKey(docUri);
     const state = getLocalHighlightState(groupKey);
@@ -834,7 +971,13 @@ function removeHighlightForTextLocal(docUri: string, text: string) {
         }
     }
     state.words[idx] = undefined;
-    state.next = idx;
+
+    // Release the color back to the queue
+    if (localColorQueues.has(groupKey)) {
+        localColorQueues.get(groupKey)!.releaseIndex(idx);
+    }
+
+    // Don't need to update next since we're now using the queue
     savePersistentState();
 }
 
@@ -875,6 +1018,16 @@ function clearHighlightsLocal() {
                 ed.setDecorations(dec, []);
             });
         }
+    }
+
+    // Clear the local color map for this group
+    if (localHighlightColorMaps.has(groupKey)) {
+        localHighlightColorMaps.get(groupKey)!.clear();
+    }
+
+    // Reset the local color queue for this group
+    if (localColorQueues.has(groupKey)) {
+        localColorQueues.set(groupKey, new ColorQueue(state.decorations.length, areRandomColorsEnabled()));
     }
 
     state.words.fill(undefined);
@@ -1422,6 +1575,11 @@ function clearAllLocalHighlights() {
                 }
             }
 
+            // Clear the local color map for this group
+            if (localHighlightColorMaps.has(groupKey)) {
+                localHighlightColorMaps.get(groupKey)!.clear();
+            }
+
             state.words.fill(undefined);
             state.next = 0;
         }
@@ -1794,6 +1952,74 @@ export function activate(context: vscode.ExtensionContext) {
 
                 // Reapply all highlights
                 applyHighlightsToOpenEditors();
+            }
+
+            // Handle palette changes by clearing all highlights and recreating decorations
+            if (e.affectsConfiguration("chainGrep.colours")) {
+                // Clear all highlights
+                clearHighlightsGlobal(false);
+
+                for (const [groupKey, _] of localHighlightMap.entries()) {
+                    const state = localHighlightMap.get(groupKey)!;
+                    for (const ed of vscode.window.visibleTextEditors) {
+                        if (getLocalHighlightKey(ed.document.uri.toString()) === groupKey) {
+                            state.decorations.forEach((dec) => {
+                                ed.setDecorations(dec, []);
+                            });
+                        }
+                    }
+
+                    // Clear color maps for this group
+                    localHighlightColorMaps.get(groupKey)?.clear();
+                    localColorIndexMaps.delete(groupKey);
+                }
+
+                // Recreate all decorations
+                initGlobalHighlightDecorations();
+
+                // Recreate local decorations on demand
+                localHighlightMap.clear();
+
+                vscode.window.showInformationMessage(
+                    "Chain Grep: Color palette changed, all highlights have been reset"
+                );
+            }
+
+            // Handle random colors setting change
+            if (e.affectsConfiguration("chainGrep.randomColors")) {
+                const isRandom = areRandomColorsEnabled();
+
+                // Update global color queue
+                if (globalColorQueue) {
+                    globalColorQueue.setRandom(isRandom);
+                } else {
+                    globalColorQueue = new ColorQueue(globalHighlightDecorations.length, isRandom);
+                }
+
+                // Update all local color queues
+                for (const [key, queue] of localColorQueues.entries()) {
+                    queue.setRandom(isRandom);
+                }
+
+                // Recreate all decorations with new random/sequential order
+                initGlobalHighlightDecorations();
+
+                // Clear local highlights and let them be recreated with new order
+                for (const [groupKey, _] of localHighlightMap.entries()) {
+                    localHighlightColorMaps.get(groupKey)?.clear();
+                    localColorIndexMaps.delete(groupKey);
+                }
+
+                // Recreate local decorations on demand
+                localHighlightMap.clear();
+
+                // Clear all highlights
+                clearHighlightsGlobal(false);
+                clearAllLocalHighlights();
+
+                vscode.window.showInformationMessage(
+                    "Chain Grep: Random colors setting changed, all highlights have been reset"
+                );
             }
         })
     );
