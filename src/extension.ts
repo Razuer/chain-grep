@@ -14,6 +14,7 @@ import {
     clearAllLocalHighlights,
     reapplyHighlightsLocal,
     applyHighlightsToOpenEditors,
+    resetAllHighlightDecorations,
 } from "./services/highlightService";
 import {
     executeChainSearch,
@@ -29,8 +30,15 @@ import {
     setContext,
     cleanupUnusedResources,
 } from "./services/stateService";
-import { isDetailedChainDocEnabled, isCleanupLoggingEnabled, getCleanupInterval } from "./services/configService";
-import { getSelectedTextOrWord, isRegexValid } from "./utils/utils";
+import {
+    isDetailedChainDocEnabled,
+    isCleanupLoggingEnabled,
+    getCleanupInterval,
+    isRegexValid,
+    areScrollbarIndicatorsEnabled,
+    areRandomColorsEnabled,
+} from "./services/configService";
+import { getSelectedTextOrWord } from "./utils/utils";
 
 // Constants
 const CHAIN_GREP_SCHEME = "chaingrep";
@@ -52,17 +60,20 @@ export async function activate(context: vscode.ExtensionContext) {
         })
     );
 
-    // Initialize global highlight decorations
+    // Initialize global highlight decorations - must be done before restoring state
     initGlobalHighlightDecorations();
 
     // Load persistent state
     loadPersistentState(context, chainGrepProvider);
 
-    // Apply saved highlights to open editors
-    applyHighlightsToOpenEditors(chainGrepMap);
-
-    // Mark the filesystem provider as initialized
+    // Mark the filesystem provider as initialized before applying highlights
     chainGrepFs.markInitialized();
+
+    // Apply saved highlights to open editors
+    setTimeout(() => {
+        applyHighlightsToOpenEditors(chainGrepMap);
+        console.log("Chain Grep: Applied highlights from saved state");
+    }, 1000);
 
     // Create the tree view
     const treeView = vscode.window.createTreeView("chainGrepView", {
@@ -118,21 +129,25 @@ export async function activate(context: vscode.ExtensionContext) {
     const closeAllNodesCmd = vscode.commands.registerCommand("chainGrep.closeAllNodes", closeAllNodes);
 
     // Highlight commands
-    const clearAllLocalHighlightsCmd = vscode.commands.registerCommand("chainGrep.clearAllLocalHighlights", () =>
-        clearAllLocalHighlights(chainGrepMap)
-    );
+    const clearAllLocalHighlightsCmd = vscode.commands.registerCommand("chainGrep.clearAllLocalHighlights", () => {
+        clearAllLocalHighlights(chainGrepMap);
+        savePersistentState(); // Dodane zapisywanie stanu
+    });
 
-    const clearAllGlobalHighlightsCmd = vscode.commands.registerCommand("_chainGrep.clearAllGlobalHighlights", () =>
-        clearHighlightsGlobal(true)
-    );
+    const clearAllGlobalHighlightsCmd = vscode.commands.registerCommand("_chainGrep.clearAllGlobalHighlights", () => {
+        clearHighlightsGlobal(true);
+        savePersistentState(); // Dodane zapisywanie stanu
+    });
 
     const toggleHighlightCmd = vscode.commands.registerTextEditorCommand("chainGrep.toggleHighlight", (editor) => {
         const text = getSelectedTextOrWord(editor);
         toggleHighlightLocal(editor, text, chainGrepMap);
+        savePersistentState(); // Ensure state is saved after highlight changes
     });
 
     const clearHighlightsCmd = vscode.commands.registerTextEditorCommand("chainGrep.clearHighlights", (editor) => {
         clearHighlightsLocal(editor, chainGrepMap);
+        savePersistentState(); // Ensure state is saved after highlight changes
     });
 
     const toggleHighlightGlobalCmd = vscode.commands.registerTextEditorCommand(
@@ -140,6 +155,7 @@ export async function activate(context: vscode.ExtensionContext) {
         (editor) => {
             const text = getSelectedTextOrWord(editor);
             toggleHighlightGlobal(editor, text);
+            savePersistentState(); // Ensure state is saved after highlight changes
         }
     );
 
@@ -147,6 +163,7 @@ export async function activate(context: vscode.ExtensionContext) {
         "chainGrep.clearHighlightsGlobal",
         () => {
             clearHighlightsGlobal(false);
+            savePersistentState(); // Ensure state is saved after highlight changes
         }
     );
 
@@ -361,7 +378,36 @@ function handleConfigChange(e: vscode.ConfigurationChangeEvent) {
         // We would need to expose and update the interval handler
     }
 
-    // Other configuration changes are handled in their respective services
+    // Handle scrollbar indicators visibility change
+    if (e.affectsConfiguration("chainGrep.showScrollbarIndicators")) {
+        console.log("Chain Grep: Scrollbar indicators setting changed, updating decorations");
+        resetAllHighlightDecorations(chainGrepMap);
+        // Apply all highlights with new decorations
+        applyHighlightsToOpenEditors(chainGrepMap);
+    }
+
+    // Handle color palette change
+    if (e.affectsConfiguration("chainGrep.colours")) {
+        console.log("Chain Grep: Color palette changed, resetting all highlights");
+        // Since the color palette has changed, we need to recreate all decorations
+        // and clear existing highlight state as colors may have changed
+        resetAllHighlightDecorations(chainGrepMap, true);
+    }
+
+    // Handle random colors setting change
+    if (e.affectsConfiguration("chainGrep.randomColors")) {
+        console.log("Chain Grep: Random colors setting changed");
+        resetAllHighlightDecorations(chainGrepMap, true);
+    }
+
+    // Save state after any configuration change that affects highlighting
+    if (
+        e.affectsConfiguration("chainGrep.colours") ||
+        e.affectsConfiguration("chainGrep.showScrollbarIndicators") ||
+        e.affectsConfiguration("chainGrep.randomColors")
+    ) {
+        savePersistentState();
+    }
 }
 
 // Helper functions for commands

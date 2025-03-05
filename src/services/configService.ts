@@ -48,3 +48,21 @@ export function areScrollbarIndicatorsEnabled(): boolean {
     const config = vscode.workspace.getConfiguration("chainGrep");
     return config.get<boolean>("showScrollbarIndicators") !== false; // Default to true if not specified
 }
+
+export function isRegexValid(str: string): boolean {
+    if (/^\/.*\/?[igm]{0,3}$/.test(str)) {
+        return true;
+    }
+    let slashCount = 0;
+    for (let i = 0; i < str.length; i++) {
+        if (str.charAt(i) === "/") {
+            slashCount++;
+        } else {
+            if (slashCount === 1) {
+                return false;
+            }
+            slashCount = 0;
+        }
+    }
+    return slashCount !== 1;
+}
