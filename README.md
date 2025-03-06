@@ -15,13 +15,17 @@
     -   Local (chained) highlights specific to related files
     -   Global highlights visible across your entire workspace
     -   Quick clear buttons for all highlight types
+    -   Optional scrollbar indicators for all highlights
+-   **Intelligent Color Management**:
+    -   Configurable color palette with background/foreground pairs
+    -   Optional random color assignment from palette
+    -   Automatic color recycling when highlighting many terms
 -   **Results Management**: Easily manage all search results with one-click options to close all results or clear all highlights.
 -   **Automatic Re-Highlighting**: Whenever you return to a file, any highlights you had before are restored.
 -   **Easy Refresh**: The "Chain Grep: Refresh" command reverts the source file from disk (pulling in external changes, if any) and reapplies the entire chain.
 -   **Smart Memory Management**: Automatic cleanup of unused resources with configurable intervals.
 -   **Theme-Aware Icons**: All icons adapt automatically to light and dark themes for a consistent look.
 -   **Optional Multiline Regex**: When using regex, the extension can optionally apply `s` (dotall) flag automatically.
--   **Optional Random Color Palette**: If enabled, highlights are generated from a user-defined palette in random order.
 
 ## Usage
 
@@ -99,6 +103,11 @@ The extension provides default keybindings. Make sure they are not overridden by
     "command": "chainGrep.toggleHighlight",
     "key": "ctrl+alt+m",
     "when": "editorTextFocus"
+},
+{
+    "command": "chainGrep.toggleHighlightGlobal",
+    "key": "ctrl+alt+shift+m",
+    "when": "editorTextFocus"
 }
 ```
 
@@ -110,7 +119,11 @@ Below are some optional configuration keys that can be added to your user or wor
 {
     "chainGrep.randomColors": false,
     "chainGrep.colours": "#89CFF0:black, #FF6961:black",
-    "chainGrep.detailedChainDoc": false
+    "chainGrep.detailedChainDoc": true,
+    "chainGrep.showScrollbarIndicators": true,
+    "chainGrep.cleanupInterval": 5,
+    "chainGrep.maxBaseNameLength": 70,
+    "chainGrep.maxChainDescriptorLength": 30
 }
 ```
 
@@ -126,9 +139,33 @@ Below are some optional configuration keys that can be added to your user or wor
     -   If not set, the extension uses a default palette.
 
 -   **`chainGrep.detailedChainDoc` (boolean)**
+
     -   `true` => Displays detailed chain steps (header, queries, flags) in the results doc.
     -   `false` => Shows only the raw matched lines.
-    -   Default is `false`.
+    -   Default is `true`.
+
+-   **`chainGrep.showScrollbarIndicators` (boolean)**
+
+    -   `true` => Shows highlight indicators in the scrollbar (overview ruler).
+    -   `false` => Hides highlight indicators in the scrollbar.
+    -   Default is `true`.
+
+-   **`chainGrep.cleanupInterval` (number)**
+
+    -   Time in minutes between automatic cleanups of unused resources.
+    -   Set to 0 to disable automatic cleanup.
+    -   Default is 5 minutes.
+
+-   **`chainGrep.maxBaseNameLength` (number)**
+
+    -   Maximum length of source filename in result documents.
+    -   Set to 0 to disable truncation.
+    -   Default is 70 characters.
+
+-   **`chainGrep.maxChainDescriptorLength` (number)**
+    -   Maximum length of chain descriptor in result documents.
+    -   Set to 0 to disable truncation.
+    -   Default is 30 characters.
 
 ## Contributing
 

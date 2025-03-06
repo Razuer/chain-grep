@@ -4,7 +4,7 @@
     "displayName": "Chain Grep",
     "description": "Chain Grep enables chained text, regex searches and text highlighting in VS Code — refine your results step by step and refresh the entire chain when the source updates.",
     "icon": "icons/icon.png",
-    "version": "0.1.2",
+    "version": "0.1.3",
     "engines": {
         "vscode": "^1.85.2"
     },
@@ -195,7 +195,7 @@
                 "chainGrep.randomColors": {
                     "type": "boolean",
                     "default": false,
-                    "description": "Use a randomized order for highlight colors."
+                    "description": "Use a randomized order for highlight colors. Changing this setting will clear all highlights."
                 },
                 "chainGrep.detailedChainDoc": {
                     "type": "boolean",
@@ -206,11 +206,6 @@
                     "type": "number",
                     "default": 5,
                     "description": "How often to clean up orphaned resources (in minutes). Set to 0 to disable automatic cleanup."
-                },
-                "chainGrep.cleanupLogging": {
-                    "type": "boolean",
-                    "default": false,
-                    "description": "Whether to log cleanup operations to the console."
                 },
                 "chainGrep.maxBaseNameLength": {
                     "type": "number",
