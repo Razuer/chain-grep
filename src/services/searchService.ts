@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { ChainGrepQuery } from "../models/interfaces";
 import { buildChainPath } from "../utils/utils";
-import { isDetailedChainDocEnabled, getMaxBaseNameLength, getMaxChainDescriptorLength } from "./configService";
+import { getMaxBaseNameLength, getMaxChainDescriptorLength } from "./configService";
 
 export async function validateChain(queries: ChainGrepQuery[]): Promise<string[]> {
     const errors: string[] = [];

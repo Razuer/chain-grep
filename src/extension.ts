@@ -1,6 +1,5 @@
 import * as vscode from "vscode";
-import * as path from "path";
-import { ChainGrepQuery, ChainGrepChain } from "./models/interfaces";
+import { ChainGrepQuery } from "./models/interfaces";
 import { ChainGrepNode } from "./models/chainGrepNode";
 import { ChainGrepDataProvider } from "./providers/chainGrepDataProvider";
 import { ChainGrepFSProvider } from "./providers/chainGrepFSProvider";

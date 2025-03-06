@@ -158,12 +158,12 @@ Below are some optional configuration keys that can be added to your user or wor
 
 -   **`chainGrep.maxBaseNameLength` (number)**
 
-    -   Maximum length of source filename in result documents.
+    -   Maximum length of source filename in result documents filenames.
     -   Set to 0 to disable truncation.
     -   Default is 70 characters.
 
 -   **`chainGrep.maxChainDescriptorLength` (number)**
-    -   Maximum length of chain descriptor in result documents.
+    -   Maximum length of chain descriptor in result documents filenames.
     -   Set to 0 to disable truncation.
     -   Default is 30 characters.
 
