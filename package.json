@@ -104,6 +104,11 @@
                 "command": "chainGrep.toggleHighlight",
                 "key": "ctrl+alt+m",
                 "when": "editorTextFocus"
+            },
+            {
+                "command": "chainGrep.toggleHighlightGlobal",
+                "key": "ctrl+alt+shift+m",
+                "when": "editorTextFocus"
             }
         ],
         "viewsContainers": {

@@ -8,7 +8,6 @@ export class ChainGrepFSProvider implements vscode.FileSystemProvider {
     private initialized = false;
     private pendingRequests: vscode.Uri[] = [];
 
-    // These maps will be injected from the extension
     private chainGrepContents: Map<string, string>;
     private chainGrepMap: Map<string, any>;
 
@@ -74,7 +73,6 @@ export class ChainGrepFSProvider implements vscode.FileSystemProvider {
                 async () => {
                     const chainInfo = this.chainGrepMap.get(uri.toString())!;
 
-                    // We'll need to handle this in extension.ts since we need searchService functions
                     this._onDidChangeFile.fire([
                         {
                             type: vscode.FileChangeType.Changed,

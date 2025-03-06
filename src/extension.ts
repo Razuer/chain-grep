@@ -5,7 +5,7 @@ import { ChainGrepNode } from "./models/chainGrepNode";
 import { ChainGrepDataProvider } from "./providers/chainGrepDataProvider";
 import { ChainGrepFSProvider } from "./providers/chainGrepFSProvider";
 import {
-    initGlobalHighlightDecorations,
+    initHighlightDecorations,
     toggleHighlightGlobal,
     clearHighlightsGlobal,
     reapplyHighlightsGlobal,
@@ -16,12 +16,7 @@ import {
     applyHighlightsToOpenEditors,
     resetAllHighlightDecorations,
 } from "./services/highlightService";
-import {
-    executeChainSearch,
-    generateChainGrepDocUri,
-    buildChainDetailedHeader,
-    validateChain,
-} from "./services/searchService";
+import { executeChainSearch, generateChainGrepDocUri, buildChainDetailedHeader } from "./services/searchService";
 import {
     getChainGrepMap,
     getChainGrepContents,
@@ -32,27 +27,21 @@ import {
 } from "./services/stateService";
 import {
     isDetailedChainDocEnabled,
-    isCleanupLoggingEnabled,
     getCleanupInterval,
     isRegexValid,
-    areScrollbarIndicatorsEnabled,
-    areRandomColorsEnabled,
+    showStatusMessage,
 } from "./services/configService";
 import { getSelectedTextOrWord } from "./utils/utils";
 
-// Constants
 const CHAIN_GREP_SCHEME = "chaingrep";
 
-// Main providers
 const chainGrepProvider = new ChainGrepDataProvider();
 const chainGrepMap = getChainGrepMap();
 const chainGrepContents = getChainGrepContents();
 
 export async function activate(context: vscode.ExtensionContext) {
-    // Set the extension context for state service
     setContext(context);
 
-    // Initialize the file system provider
     const chainGrepFs = new ChainGrepFSProvider(chainGrepContents, chainGrepMap);
     context.subscriptions.push(
         vscode.workspace.registerFileSystemProvider(CHAIN_GREP_SCHEME, chainGrepFs, {
@@ -60,28 +49,22 @@ export async function activate(context: vscode.ExtensionContext) {
         })
     );
 
-    // Initialize global highlight decorations - must be done before restoring state
-    initGlobalHighlightDecorations();
+    initHighlightDecorations();
 
-    // Load persistent state
     loadPersistentState(context, chainGrepProvider);
 
-    // Mark the filesystem provider as initialized before applying highlights
     chainGrepFs.markInitialized();
 
-    // Apply saved highlights to open editors
     setTimeout(() => {
         applyHighlightsToOpenEditors(chainGrepMap);
-        console.log("Chain Grep: Applied highlights from saved state");
+        showStatusMessage("Chain Grep: Applied highlights from saved state", 1000);
     }, 1000);
 
-    // Create the tree view
     const treeView = vscode.window.createTreeView("chainGrepView", {
         treeDataProvider: chainGrepProvider,
         showCollapseAll: true,
     });
 
-    // Handle tree view visibility
     treeView.onDidChangeVisibility((e) => {
         if (e.visible) {
             chainGrepProvider.refresh();
@@ -89,28 +72,20 @@ export async function activate(context: vscode.ExtensionContext) {
         }
     });
 
-    // Add tree view to disposables
     context.subscriptions.push(treeView);
 
-    // Run initial cleanup
-    cleanupUnusedResources(false, isCleanupLoggingEnabled());
+    cleanupUnusedResources(false);
 
-    // Setup automatic cleanup if enabled
     let cleanupInterval: NodeJS.Timeout | undefined;
     const intervalMs = getCleanupInterval();
 
     if (intervalMs > 0) {
-        cleanupInterval = setInterval(() => cleanupUnusedResources(false, isCleanupLoggingEnabled()), intervalMs);
-        if (isCleanupLoggingEnabled()) {
-            console.log(`ChainGrep: Scheduled cleanup every ${intervalMs / 60000} minutes`);
-        }
-    } else if (isCleanupLoggingEnabled()) {
-        console.log(`ChainGrep: Automatic cleanup disabled`);
+        cleanupInterval = setInterval(() => cleanupUnusedResources(false), intervalMs);
+        showStatusMessage(`ChainGrep: Scheduled cleanup every ${intervalMs / 60000} minutes`, 1500);
+    } else {
+        showStatusMessage(`ChainGrep: Automatic cleanup disabled`, 1500);
     }
 
-    // Register commands
-
-    // Tree view node commands
     const openNodeCmd = vscode.commands.registerCommand("_chainGrep.openNode", (node: ChainGrepNode) => {
         openNode(node);
     });
@@ -128,34 +103,33 @@ export async function activate(context: vscode.ExtensionContext) {
 
     const closeAllNodesCmd = vscode.commands.registerCommand("chainGrep.closeAllNodes", closeAllNodes);
 
-    // Highlight commands
     const clearAllLocalHighlightsCmd = vscode.commands.registerCommand("chainGrep.clearAllLocalHighlights", () => {
         clearAllLocalHighlights(chainGrepMap);
-        savePersistentState(); // Dodane zapisywanie stanu
+        savePersistentState();
     });
 
     const clearAllGlobalHighlightsCmd = vscode.commands.registerCommand("_chainGrep.clearAllGlobalHighlights", () => {
         clearHighlightsGlobal(true);
-        savePersistentState(); // Dodane zapisywanie stanu
+        savePersistentState();
     });
 
     const toggleHighlightCmd = vscode.commands.registerTextEditorCommand("chainGrep.toggleHighlight", (editor) => {
         const text = getSelectedTextOrWord(editor);
         toggleHighlightLocal(editor, text, chainGrepMap);
-        savePersistentState(); // Ensure state is saved after highlight changes
+        savePersistentState();
     });
 
     const clearHighlightsCmd = vscode.commands.registerTextEditorCommand("chainGrep.clearHighlights", (editor) => {
         clearHighlightsLocal(editor, chainGrepMap);
-        savePersistentState(); // Ensure state is saved after highlight changes
+        savePersistentState();
     });
 
     const toggleHighlightGlobalCmd = vscode.commands.registerTextEditorCommand(
         "chainGrep.toggleHighlightGlobal",
         (editor) => {
             const text = getSelectedTextOrWord(editor);
-            toggleHighlightGlobal(editor, text);
-            savePersistentState(); // Ensure state is saved after highlight changes
+            toggleHighlightGlobal(editor, text, chainGrepMap);
+            savePersistentState();
         }
     );
 
@@ -163,11 +137,10 @@ export async function activate(context: vscode.ExtensionContext) {
         "chainGrep.clearHighlightsGlobal",
         () => {
             clearHighlightsGlobal(false);
-            savePersistentState(); // Ensure state is saved after highlight changes
+            savePersistentState();
         }
     );
 
-    // Search commands
     const grepTextCmd = vscode.commands.registerTextEditorCommand("chainGrep.grepText", async (editor) => {
         const input = await showQueryAndOptionsQuickInput(undefined, "text");
         if (!input?.query) {
@@ -294,7 +267,6 @@ export async function activate(context: vscode.ExtensionContext) {
         }
     });
 
-    // Event handlers
     const closeDocHandler = vscode.workspace.onDidCloseTextDocument((doc) => {
         const docUri = doc.uri;
 
@@ -338,10 +310,9 @@ export async function activate(context: vscode.ExtensionContext) {
     });
 
     const forceCleanupCmd = vscode.commands.registerCommand("chainGrep.forceCleanup", async () => {
-        cleanupUnusedResources(true, isCleanupLoggingEnabled());
+        cleanupUnusedResources(true);
     });
 
-    // Add event handlers and commands to disposables
     context.subscriptions.push(
         openNodeCmd,
         closeNodeCmd,
@@ -371,36 +342,26 @@ export async function activate(context: vscode.ExtensionContext) {
     );
 }
 
-// Configuration change handler
 function handleConfigChange(e: vscode.ConfigurationChangeEvent) {
     if (e.affectsConfiguration("chainGrep.cleanupInterval")) {
-        // This is handled in the activation function
-        // We would need to expose and update the interval handler
     }
 
-    // Handle scrollbar indicators visibility change
     if (e.affectsConfiguration("chainGrep.showScrollbarIndicators")) {
         console.log("Chain Grep: Scrollbar indicators setting changed, updating decorations");
         resetAllHighlightDecorations(chainGrepMap);
-        // Apply all highlights with new decorations
         applyHighlightsToOpenEditors(chainGrepMap);
     }
 
-    // Handle color palette change
     if (e.affectsConfiguration("chainGrep.colours")) {
         console.log("Chain Grep: Color palette changed, resetting all highlights");
-        // Since the color palette has changed, we need to recreate all decorations
-        // and clear existing highlight state as colors may have changed
         resetAllHighlightDecorations(chainGrepMap, true);
     }
 
-    // Handle random colors setting change
     if (e.affectsConfiguration("chainGrep.randomColors")) {
         console.log("Chain Grep: Random colors setting changed");
         resetAllHighlightDecorations(chainGrepMap, true);
     }
 
-    // Save state after any configuration change that affects highlighting
     if (
         e.affectsConfiguration("chainGrep.colours") ||
         e.affectsConfiguration("chainGrep.showScrollbarIndicators") ||
@@ -409,8 +370,6 @@ function handleConfigChange(e: vscode.ConfigurationChangeEvent) {
         savePersistentState();
     }
 }
-
-// Helper functions for commands
 
 async function showQueryAndOptionsQuickInput(defaultQuery?: string, searchType: "text" | "regex" = "text") {
     const quickPick = vscode.window.createQuickPick();
@@ -499,11 +458,10 @@ async function executeChainSearchAndDisplayResults(
     if (!results.length) {
         vscode.window.showInformationMessage("No matches found.");
     } else {
-        vscode.window.setStatusBarMessage(
+        showStatusMessage(
             `Chain Grep: Found ${results.length} matches (${((results.length / stats.totalLines) * 100).toFixed(
                 1
-            )}% of source)`,
-            5000
+            )}% of source)`
         );
     }
 
@@ -723,6 +681,6 @@ async function closeAllNodes() {
 }
 
 export function deactivate() {
-    cleanupUnusedResources(false, isCleanupLoggingEnabled());
+    cleanupUnusedResources();
     savePersistentState();
 }

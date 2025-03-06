@@ -23,11 +23,6 @@ export function isDetailedChainDocEnabled(): boolean {
     return config.get<boolean>("detailedChainDoc") === true;
 }
 
-export function isCleanupLoggingEnabled(): boolean {
-    const config = vscode.workspace.getConfiguration("chainGrep");
-    return config.get<boolean>("cleanupLogging") === true;
-}
-
 export function getMaxBaseNameLength(): number {
     const config = vscode.workspace.getConfiguration("chainGrep");
     return config.get<number>("maxBaseNameLength") ?? 70;
@@ -46,7 +41,7 @@ export function getCleanupInterval(): number {
 
 export function areScrollbarIndicatorsEnabled(): boolean {
     const config = vscode.workspace.getConfiguration("chainGrep");
-    return config.get<boolean>("showScrollbarIndicators") !== false; // Default to true if not specified
+    return config.get<boolean>("showScrollbarIndicators") !== false;
 }
 
 export function isRegexValid(str: string): boolean {
@@ -65,4 +60,26 @@ export function isRegexValid(str: string): boolean {
         }
     }
     return slashCount !== 1;
+}
+
+let statusBarItem: vscode.StatusBarItem | undefined;
+
+export function getStatusBar(): vscode.StatusBarItem {
+    if (!statusBarItem) {
+        statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+        statusBarItem.name = "Chain Grep";
+    }
+    return statusBarItem;
+}
+
+export function showStatusMessage(message: string, timeout: number = 5000): void {
+    const statusBar = getStatusBar();
+    statusBar.text = `$(sync) ${message}`;
+    statusBar.show();
+
+    setTimeout(() => {
+        if (statusBar.text === `$(sync) ${message}`) {
+            statusBar.hide();
+        }
+    }, timeout);
 }

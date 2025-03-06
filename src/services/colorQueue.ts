@@ -1,10 +1,22 @@
 export class ColorQueue {
     private indexes: number[];
     private isRandom: boolean;
+    private usedIndexes: Set<number>;
+    private originalOrder: number[];
+    private isReversedSequential: boolean;
 
-    constructor(length: number, isRandom: boolean = false) {
-        this.indexes = Array.from({ length }, (_, i) => i);
+    constructor(length: number, isRandom: boolean = false, isReversedSequential: boolean = false) {
+        this.originalOrder = Array.from({ length }, (_, i) => i);
+
+        if (!isRandom && isReversedSequential) {
+            this.indexes = [...this.originalOrder].reverse();
+        } else {
+            this.indexes = [...this.originalOrder];
+        }
+
         this.isRandom = isRandom;
+        this.isReversedSequential = isReversedSequential;
+        this.usedIndexes = new Set<number>();
 
         if (isRandom) {
             this.indexes = shuffleArray([...this.indexes]);
@@ -12,34 +24,59 @@ export class ColorQueue {
     }
 
     public getNextIndex(): number {
-        // Get the first index from the queue
+        if (this.indexes.length === 0) {
+            if (this.isRandom) {
+                return this.originalOrder[Math.floor(Math.random() * this.originalOrder.length)];
+            } else if (this.isReversedSequential) {
+                return this.originalOrder[this.originalOrder.length - 1];
+            } else {
+                return this.originalOrder[0];
+            }
+        }
+
         const index = this.indexes.shift();
 
         if (index === undefined) {
-            return 0; // Shouldn't happen, but just in case
+            return 0;
         }
 
-        // Put the index at the end of the queue
-        this.indexes.push(index);
+        this.usedIndexes.add(index);
 
         return index;
     }
 
-    // Add a new method to handle releasing an index
     public releaseIndex(index: number): void {
-        // Find and remove the index from wherever it is in the queue
-        const indexPosition = this.indexes.indexOf(index);
-        if (indexPosition >= 0) {
-            this.indexes.splice(indexPosition, 1);
-        }
+        this.usedIndexes.delete(index);
 
-        // For non-random mode (sequential colors), released indexes go to the front
-        // This ensures the same color will be assigned next time
         if (!this.isRandom) {
-            this.indexes.unshift(index);
+            if (this.isReversedSequential) {
+                let inserted = false;
+                for (let i = 0; i < this.indexes.length; i++) {
+                    if (index > this.indexes[i]) {
+                        this.indexes.splice(i, 0, index);
+                        inserted = true;
+                        break;
+                    }
+                }
+                if (!inserted) {
+                    this.indexes.push(index);
+                }
+            } else {
+                let inserted = false;
+                for (let i = 0; i < this.indexes.length; i++) {
+                    if (index < this.indexes[i]) {
+                        this.indexes.splice(i, 0, index);
+                        inserted = true;
+                        break;
+                    }
+                }
+                if (!inserted) {
+                    this.indexes.push(index);
+                }
+            }
         } else {
-            // For random mode, released indexes go to the back of the queue
-            this.indexes.push(index);
+            const position = Math.floor(Math.random() * (this.indexes.length + 1));
+            this.indexes.splice(position, 0, index);
         }
     }
 
@@ -47,12 +84,32 @@ export class ColorQueue {
         if (this.isRandom !== isRandom) {
             this.isRandom = isRandom;
 
-            // Create a fresh set of indexes
-            const length = this.indexes.length;
-            this.indexes = Array.from({ length }, (_, i) => i);
+            const availableIndexes = this.originalOrder.filter((idx) => !this.usedIndexes.has(idx));
 
             if (isRandom) {
-                this.indexes = shuffleArray([...this.indexes]);
+                this.indexes = shuffleArray([...availableIndexes]);
+            } else {
+                if (this.isReversedSequential) {
+                    this.indexes = [...availableIndexes].sort((a, b) => b - a);
+                } else {
+                    this.indexes = [...availableIndexes].sort((a, b) => a - b);
+                }
+            }
+        }
+    }
+
+    public setReversedSequential(isReversed: boolean): void {
+        if (this.isReversedSequential !== isReversed) {
+            this.isReversedSequential = isReversed;
+
+            if (!this.isRandom) {
+                const availableIndexes = [...this.indexes];
+
+                if (isReversed) {
+                    this.indexes = availableIndexes.sort((a, b) => b - a);
+                } else {
+                    this.indexes = availableIndexes.sort((a, b) => a - b);
+                }
             }
         }
     }
@@ -63,6 +120,15 @@ export class ColorQueue {
 
     public setIndexes(indexes: number[]): void {
         this.indexes = [...indexes];
+
+        this.usedIndexes.clear();
+
+        for (let i = 0; i < this.originalOrder.length; i++) {
+            const idx = this.originalOrder[i];
+            if (!this.indexes.includes(idx)) {
+                this.usedIndexes.add(idx);
+            }
+        }
     }
 }
 

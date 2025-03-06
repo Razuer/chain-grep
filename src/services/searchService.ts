@@ -133,17 +133,14 @@ export function generateChainGrepDocUri(sourceUri: vscode.Uri, chain: ChainGrepQ
 
     const chainDescriptor = buildChainPath(chain);
 
-    // Get max length settings
     const maxBaseNameLength = getMaxBaseNameLength();
     const maxChainDescriptorLength = getMaxChainDescriptorLength();
 
-    // Truncate the source filename if too long and truncation is enabled
     const truncatedBaseName =
         maxBaseNameLength > 0 && baseName.length > maxBaseNameLength
             ? "..." + baseName.slice(baseName.length - maxBaseNameLength)
             : baseName;
 
-    // Truncate the chain descriptor from the left if too long and truncation is enabled
     const truncatedChainDescriptor =
         maxChainDescriptorLength > 0 && chainDescriptor.length > maxChainDescriptorLength
             ? "..." + chainDescriptor.slice(chainDescriptor.length - maxChainDescriptorLength)

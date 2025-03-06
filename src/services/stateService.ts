@@ -2,10 +2,10 @@ import * as vscode from "vscode";
 import { debounce } from "../utils/utils";
 import { getHighlightState, restoreHighlightState } from "./highlightService";
 import { ChainGrepDataProvider } from "../providers/chainGrepDataProvider";
+import { showStatusMessage } from "./configService";
 
 let extensionContext: vscode.ExtensionContext;
 
-// Data stores that need to be persisted
 const chainGrepMap: Map<string, any> = new Map();
 const chainGrepContents: Map<string, string> = new Map();
 
@@ -23,8 +23,6 @@ const debouncedSavePersistentState = debounce(() => {
         contentsData,
         persistentHighlights,
     });
-
-    console.log("Chain Grep: State saved");
 }, 1000);
 
 export function getChainGrepMap(): Map<string, any> {
@@ -123,7 +121,7 @@ function rebuildTreeViewFromState(chainGrepProvider: ChainGrepDataProvider) {
     chainGrepProvider.refresh();
 }
 
-export function cleanupUnusedResources(showNotifications: boolean = false, isCleanupLogging: boolean): number {
+export function cleanupUnusedResources(showNotifications: boolean = false): number {
     const visibleUris = vscode.window.visibleTextEditors.map((editor) => editor.document.uri.toString());
 
     let cleanedCount = 0;
@@ -133,18 +131,14 @@ export function cleanupUnusedResources(showNotifications: boolean = false, isCle
             chainGrepContents.delete(contentUri);
             cleanedCount++;
 
-            if (isCleanupLogging || showNotifications) {
-                console.log(`ChainGrep: Cleaned up orphaned content: ${contentUri}`);
-            }
+            showStatusMessage(`ChainGrep: Cleaned up orphaned content: ${contentUri}`);
         }
     }
 
     if (cleanedCount > 0) {
         savePersistentState();
 
-        if (isCleanupLogging || showNotifications) {
-            console.log(`ChainGrep: Background cleanup removed ${cleanedCount} orphaned resources`);
-        }
+        showStatusMessage(`ChainGrep: Background cleanup removed ${cleanedCount} orphaned resources`);
 
         if (showNotifications) {
             vscode.window.showInformationMessage(`Chain Grep: Cleaned up ${cleanedCount} orphaned resources`);
