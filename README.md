@@ -1,5 +1,7 @@
 # CHAIN GREP
 
+![Chain Grep Icon](icons/icon.png)
+
 **Chain Grep** is a Visual Studio Code extension that lets you build and execute a sequence of chained text or regex searches on any source file. You can progressively refine your search results, refresh them when the file changes, and highlight text or other snippets. This makes it perfect for searching logs, debugging output, or any other text files. The extension provides an intuitive search interface with clear visual indication of search modes and options. In addition, you can quickly grep selected text using a custom keybinding.
 
 ## Key Features
