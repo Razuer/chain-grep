@@ -8,27 +8,27 @@ export class ChainGrepFSProvider implements vscode.FileSystemProvider {
     private initialized = false;
     private pendingRequests: vscode.Uri[] = [];
 
-    private chainGrepContents: Map<string, string>;
-    private chainGrepMap: Map<string, any>;
-
-    constructor(chainGrepContents: Map<string, string>, chainGrepMap: Map<string, any>) {
+    constructor(private chainGrepContents: Map<string, string>, private chainGrepMap: Map<string, any>) {
         this._onDidChangeFile = new vscode.EventEmitter<vscode.FileChangeEvent[]>();
         this.onDidChangeFile = this._onDidChangeFile.event;
-        this.chainGrepContents = chainGrepContents;
-        this.chainGrepMap = chainGrepMap;
     }
 
     public markInitialized(): void {
+        if (this.initialized) {
+            return;
+        }
+
         this.initialized = true;
-        for (const uri of this.pendingRequests) {
-            this._onDidChangeFile.fire([
-                {
+
+        if (this.pendingRequests.length > 0) {
+            this._onDidChangeFile.fire(
+                this.pendingRequests.map((uri) => ({
                     type: vscode.FileChangeType.Created,
                     uri,
-                },
-            ]);
+                }))
+            );
+            this.pendingRequests = [];
         }
-        this.pendingRequests = [];
     }
 
     watch(_uri: vscode.Uri, _options: { recursive: boolean; excludes: string[] }): vscode.Disposable {
@@ -61,9 +61,10 @@ export class ChainGrepFSProvider implements vscode.FileSystemProvider {
     createDirectory(_uri: vscode.Uri): void {}
 
     readFile(uri: vscode.Uri): Uint8Array {
-        const content = this.chainGrepContents.get(uri.toString());
+        const uriString = uri.toString();
+        const content = this.chainGrepContents.get(uriString);
 
-        if (!content && this.chainGrepMap.has(uri.toString())) {
+        if (!content && this.chainGrepMap.has(uriString)) {
             vscode.window.withProgress(
                 {
                     location: vscode.ProgressLocation.Notification,
@@ -71,8 +72,6 @@ export class ChainGrepFSProvider implements vscode.FileSystemProvider {
                     cancellable: false,
                 },
                 async () => {
-                    const chainInfo = this.chainGrepMap.get(uri.toString())!;
-
                     this._onDidChangeFile.fire([
                         {
                             type: vscode.FileChangeType.Changed,
@@ -98,8 +97,9 @@ export class ChainGrepFSProvider implements vscode.FileSystemProvider {
     }
 
     delete(uri: vscode.Uri, _options: { recursive: boolean }): void {
-        this.chainGrepContents.delete(uri.toString());
-        this.chainGrepMap.delete(uri.toString());
+        const uriString = uri.toString();
+        this.chainGrepContents.delete(uriString);
+        this.chainGrepMap.delete(uriString);
         this._onDidChangeFile.fire([{ type: vscode.FileChangeType.Deleted, uri }]);
     }
 

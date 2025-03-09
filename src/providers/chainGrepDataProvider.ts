@@ -19,8 +19,7 @@ export class ChainGrepDataProvider implements vscode.TreeDataProvider<ChainGrepN
 
     getChildren(element?: ChainGrepNode): Thenable<ChainGrepNode[]> {
         if (!element) {
-            const roots = Array.from(this.fileRoots.values());
-            return Promise.resolve(roots);
+            return Promise.resolve(Array.from(this.fileRoots.values()));
         } else {
             return Promise.resolve(element.children);
         }
@@ -46,39 +45,18 @@ export class ChainGrepDataProvider implements vscode.TreeDataProvider<ChainGrepN
         }
 
         const lastQuery = chain[chain.length - 1];
-        const prefix = lastQuery && lastQuery.type === "text" ? "[T]" : "[R]";
+        const prefix = lastQuery?.type === "text" ? "[T]" : "[R]";
+        const flags = this.buildFlagsString(lastQuery);
+        const displayLabel = `${prefix} "${label}"${flags}`;
 
-        let flagsStr = "";
-        if (lastQuery) {
-            const flags: string[] = [];
-            if (lastQuery.inverted) {
-                flags.push("invert");
-            }
-            if (lastQuery.caseSensitive) {
-                flags.push("case");
-            }
-            if (flags.length) {
-                flagsStr = ` (${flags.join(", ")})`;
-            }
-        }
-
-        const displayLabel = `${prefix} "${label}"${flagsStr}`;
-
-        // Check if a node with identical chain already exists
         const existingNode = root.children.find((child) => this.areChainQueriesEqual(child.chain, chain));
 
         if (existingNode) {
-            console.log(
-                `Chain Grep: Found existing node with same chain, updating docUri from ${existingNode.docUri} to ${docUri}`
-            );
-
-            // Update docUriToNode mapping
             if (existingNode.docUri) {
                 this.docUriToNode.delete(existingNode.docUri);
             }
             existingNode.docUri = docUri;
             this.docUriToNode.set(docUri, existingNode);
-
             this.refresh();
             return;
         }
@@ -98,10 +76,8 @@ export class ChainGrepDataProvider implements vscode.TreeDataProvider<ChainGrepN
     }
 
     addSubChain(parentDocUri: string, label: string, chain: ChainGrepQuery[], docUri: string) {
-        // Check if we already have this document in the tree view
         const existingNodeForDocUri = this.docUriToNode.get(docUri);
         if (existingNodeForDocUri) {
-            // Just refresh to make sure UI is up to date
             this.refresh();
             return;
         }
@@ -111,42 +87,22 @@ export class ChainGrepDataProvider implements vscode.TreeDataProvider<ChainGrepN
             this.addRootChain(parentDocUri, label, chain, docUri);
             return;
         }
+
         parentNode.collapsibleState = vscode.TreeItemCollapsibleState.Expanded;
 
         const lastQuery = chain[chain.length - 1];
-        const prefix = lastQuery && lastQuery.type === "text" ? "[T]" : "[R]";
+        const prefix = lastQuery?.type === "text" ? "[T]" : "[R]";
+        const flags = this.buildFlagsString(lastQuery);
+        const displayLabel = `${prefix} "${label}"${flags}`;
 
-        let flagsStr = "";
-        if (lastQuery) {
-            const flags: string[] = [];
-            if (lastQuery.inverted) {
-                flags.push("invert");
-            }
-            if (lastQuery.caseSensitive) {
-                flags.push("case");
-            }
-            if (flags.length) {
-                flagsStr = ` (${flags.join(", ")})`;
-            }
-        }
-
-        const displayLabel = `${prefix} "${label}"${flagsStr}`;
-
-        // Check if a node with identical chain already exists
         const existingNode = parentNode.children.find((child) => this.areChainQueriesEqual(child.chain, chain));
 
         if (existingNode) {
-            console.log(
-                `Chain Grep: Found existing subchain node, updating docUri from ${existingNode.docUri} to ${docUri}`
-            );
-
-            // Update docUriToNode mapping
             if (existingNode.docUri) {
                 this.docUriToNode.delete(existingNode.docUri);
             }
             existingNode.docUri = docUri;
             this.docUriToNode.set(docUri, existingNode);
-
             this.refresh();
             return;
         }
@@ -164,7 +120,22 @@ export class ChainGrepDataProvider implements vscode.TreeDataProvider<ChainGrepN
         this.refresh();
     }
 
-    // Helper method to compare two chain queries for equality
+    private buildFlagsString(query: ChainGrepQuery | undefined): string {
+        if (!query) {
+            return "";
+        }
+
+        const flags: string[] = [];
+        if (query.inverted) {
+            flags.push("invert");
+        }
+        if (query.caseSensitive) {
+            flags.push("case");
+        }
+
+        return flags.length ? ` (${flags.join(", ")})` : "";
+    }
+
     private areChainQueriesEqual(chain1: ChainGrepQuery[], chain2: ChainGrepQuery[]): boolean {
         if (chain1.length !== chain2.length) {
             return false;

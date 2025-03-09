@@ -14,18 +14,16 @@ export function escapeRegExp(input: string): string {
 }
 
 export function isChainGrepUri(uri: string | vscode.Uri): boolean {
-    if (typeof uri === "string") {
-        return uri.startsWith(`chaingrep:/`);
-    } else {
-        return uri.scheme === "chaingrep";
-    }
+    return typeof uri === "string" ? uri.startsWith(`chaingrep:/`) : uri.scheme === "chaingrep";
 }
 
 export function getSelectedTextOrWord(editor: vscode.TextEditor): string | undefined {
     const selection = editor.selection;
+
     if (!selection.isEmpty) {
         return editor.document.getText(selection);
     }
+
     const wordRange = editor.document.getWordRangeAtPosition(selection.start);
     return wordRange ? editor.document.getText(wordRange) : undefined;
 }
@@ -45,34 +43,36 @@ export function debounce<F extends (...args: any[]) => any>(
 }
 
 export function buildChainPath(chain: any[]): string {
+    if (!chain.length) {
+        return "";
+    }
+
     return chain
         .map((q) => {
             const prefix = q.type === "text" ? "T" : "R";
             const invertMark = q.inverted ? "!" : "";
             const caseMark = q.caseSensitive ? "C" : "";
-            let shortQuery = q.query;
-            if (shortQuery.length > 15) {
-                shortQuery = shortQuery.substring(0, 15) + "...";
-            }
+
+            const shortQuery = q.query.length > 15 ? q.query.substring(0, 15) + "..." : q.query;
+
             return `${prefix}${invertMark}${caseMark}[${shortQuery}]`;
         })
         .join("->");
 }
 
 export function isRegexValid(str: string): boolean {
-    if (/^\/.*\/?[igm]{0,3}$/.test(str)) {
+    if (/^\/.*\/[igm]*$/.test(str)) {
         return true;
     }
+
     let slashCount = 0;
     for (let i = 0; i < str.length; i++) {
-        if (str.charAt(i) === "/") {
+        if (str[i] === "/") {
             slashCount++;
-        } else {
-            if (slashCount === 1) {
-                return false;
-            }
-            slashCount = 0;
+        } else if (slashCount === 1) {
+            return false;
         }
     }
+
     return slashCount !== 1;
 }

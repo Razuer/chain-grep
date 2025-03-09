@@ -37,6 +37,7 @@ const CHAIN_GREP_SCHEME = "chaingrep";
 const chainGrepProvider = new ChainGrepDataProvider();
 const chainGrepMap = getChainGrepMap();
 const chainGrepContents = getChainGrepContents();
+let cleanupInterval: NodeJS.Timeout | undefined;
 
 export async function activate(context: vscode.ExtensionContext) {
     setContext(context);
@@ -75,7 +76,6 @@ export async function activate(context: vscode.ExtensionContext) {
 
     cleanupUnusedResources(false);
 
-    let cleanupInterval: NodeJS.Timeout | undefined;
     const intervalMs = getCleanupInterval();
 
     if (intervalMs > 0) {
@@ -343,6 +343,19 @@ export async function activate(context: vscode.ExtensionContext) {
 
 function handleConfigChange(e: vscode.ConfigurationChangeEvent) {
     if (e.affectsConfiguration("chainGrep.cleanupInterval")) {
+        // Implementation for cleanup interval change
+        const intervalMs = getCleanupInterval();
+        if (cleanupInterval) {
+            clearInterval(cleanupInterval);
+            cleanupInterval = undefined;
+        }
+
+        if (intervalMs > 0) {
+            cleanupInterval = setInterval(() => cleanupUnusedResources(false), intervalMs);
+            showStatusMessage(`ChainGrep: Cleanup interval changed to ${intervalMs / 60000} minutes`);
+        } else {
+            showStatusMessage(`ChainGrep: Automatic cleanup disabled`);
+        }
     }
 
     if (e.affectsConfiguration("chainGrep.showScrollbarIndicators")) {

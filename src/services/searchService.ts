@@ -6,7 +6,8 @@ import { getMaxBaseNameLength, getMaxChainDescriptorLength } from "./configServi
 
 export async function validateChain(queries: ChainGrepQuery[]): Promise<string[]> {
     const errors: string[] = [];
-    queries.forEach((q, index) => {
+    for (let index = 0; index < queries.length; index++) {
+        const q = queries[index];
         if (q.type === "regex") {
             let flags = q.flags || "";
             if (!flags.includes("s")) {
@@ -19,31 +20,40 @@ export async function validateChain(queries: ChainGrepQuery[]): Promise<string[]
                 errors.push(`Step ${index + 1}: Invalid regex '${q.query}' with flags '${flags}'`);
             }
         }
-    });
+    }
     return errors;
 }
 
 export function applyChainQuery(lines: string[], query: ChainGrepQuery): string[] {
     if (query.type === "text") {
-        return lines.filter((line) => {
-            const textLine = query.caseSensitive ? line : line.toLowerCase();
-            const textQuery = query.caseSensitive ? query.query : query.query.toLowerCase();
-            const match = textLine.includes(textQuery);
-            return query.inverted ? !match : match;
-        });
+        const isInverted = query.inverted;
+        if (query.caseSensitive) {
+            const textQuery = query.query;
+            return lines.filter((line) => {
+                const match = line.includes(textQuery);
+                return isInverted ? !match : match;
+            });
+        } else {
+            const textQuery = query.query.toLowerCase();
+            return lines.filter((line) => {
+                const match = line.toLowerCase().includes(textQuery);
+                return isInverted ? !match : match;
+            });
+        }
     } else {
         let flags = query.flags || "";
         if (!query.caseSensitive && !flags.includes("i")) {
             flags += "i";
         }
-        let regex: RegExp;
+
         try {
-            regex = new RegExp(query.query, flags);
+            const regex = new RegExp(query.query, flags);
+            const isInverted = query.inverted;
+            return lines.filter((line) => isInverted !== regex.test(line));
         } catch {
             vscode.window.showInformationMessage("Invalid regular expression in chain.");
             return lines;
         }
-        return lines.filter((line) => (query.inverted ? !regex.test(line) : regex.test(line)));
     }
 }
 
@@ -65,9 +75,9 @@ export async function executeChainSearch(
         return { lines: [], stats: {} };
     }
 
-    const lines: string[] = [];
+    const lines: string[] = Array(sourceDoc.lineCount);
     for (let i = 0; i < sourceDoc.lineCount; i++) {
-        lines.push(sourceDoc.lineAt(i).text);
+        lines[i] = sourceDoc.lineAt(i).text;
     }
 
     let filtered = lines;
@@ -78,7 +88,6 @@ export async function executeChainSearch(
 
     for (let i = 0; i < chain.length; i++) {
         const query = chain[i];
-        const before = filtered.length;
         filtered = applyChainQuery(filtered, query);
         stats.steps.push({
             step: i + 1,
@@ -92,8 +101,11 @@ export async function executeChainSearch(
 
 export function buildChainDetailedHeader(chain: ChainGrepQuery[], stats?: any): string {
     const lines: string[] = ["--- Chain Grep Steps ---"];
-    chain.forEach((q, i) => {
+
+    for (let i = 0; i < chain.length; i++) {
+        const q = chain[i];
         let step = `${i + 1}. `;
+
         if (q.type === "text") {
             step += `[Text] Search for: "${q.query}"`;
         } else {
@@ -102,23 +114,23 @@ export function buildChainDetailedHeader(chain: ChainGrepQuery[], stats?: any): 
                 step += ` with flags: "${q.flags}"`;
             }
         }
+
         if (q.inverted) {
             step += " (Inverted)";
         }
         step += q.caseSensitive ? " (Case Sensitive)" : " (Case Insensitive)";
 
-        if (stats && stats.steps && stats.steps[i]) {
+        if (stats?.steps?.[i]) {
             step += ` → ${stats.steps[i].matchCount} matches`;
         }
 
         lines.push(step);
-    });
+    }
 
-    if (stats) {
-        const finalCount = stats.steps.length > 0 ? stats.steps[stats.steps.length - 1].matchCount : 0;
-        lines.push(
-            `--- Results: ${finalCount} matches (${((finalCount / stats.totalLines) * 100).toFixed(1)}% of source) ---`
-        );
+    if (stats?.steps?.length > 0) {
+        const finalCount = stats.steps[stats.steps.length - 1].matchCount;
+        const percentage = ((finalCount / stats.totalLines) * 100).toFixed(1);
+        lines.push(`--- Results: ${finalCount} matches (${percentage}% of source) ---`);
     } else {
         lines.push("-------------------------");
     }
@@ -130,7 +142,6 @@ export function generateChainGrepDocUri(sourceUri: vscode.Uri, chain: ChainGrepQ
     const sourceFilename = path.basename(sourceUri.fsPath);
     const extension = path.extname(sourceFilename);
     const baseName = path.basename(sourceFilename, extension);
-
     const chainDescriptor = buildChainPath(chain);
 
     const maxBaseNameLength = getMaxBaseNameLength();
@@ -138,20 +149,17 @@ export function generateChainGrepDocUri(sourceUri: vscode.Uri, chain: ChainGrepQ
 
     const truncatedBaseName =
         maxBaseNameLength > 0 && baseName.length > maxBaseNameLength
-            ? "..." + baseName.slice(baseName.length - maxBaseNameLength)
+            ? "..." + baseName.slice(-maxBaseNameLength)
             : baseName;
 
     const truncatedChainDescriptor =
         maxChainDescriptorLength > 0 && chainDescriptor.length > maxChainDescriptorLength
-            ? "..." + chainDescriptor.slice(chainDescriptor.length - maxChainDescriptorLength)
+            ? "..." + chainDescriptor.slice(-maxChainDescriptorLength)
             : chainDescriptor;
 
-    let docName = `[${truncatedBaseName}] : ${truncatedChainDescriptor}${extension}`;
+    const docName = `[${truncatedBaseName}] : ${truncatedChainDescriptor}${extension}`;
 
-    let safePath = docName.replace(/\\/g, "/");
-    if (!safePath.startsWith("/")) {
-        safePath = "/" + safePath;
-    }
+    const safePath = (docName.startsWith("/") ? "" : "/") + docName.replace(/\\/g, "/");
 
     return vscode.Uri.from({
         scheme: "chaingrep",
