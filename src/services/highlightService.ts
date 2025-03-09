@@ -174,7 +174,7 @@ export function clearHighlightsGlobal(showMessage = true): boolean {
     globalHighlightColorMap.clear();
 
     if (globalColorQueue) {
-        globalColorQueue = new ColorQueue(highlightDecorations.length, areRandomColorsEnabled());
+        globalColorQueue = new ColorQueue(highlightDecorations.length, areRandomColorsEnabled(), true);
     }
 
     if (showMessage) {
@@ -396,7 +396,7 @@ export function clearHighlightsLocal(editor: vscode.TextEditor, chainGrepMap: Ma
     }
 
     if (localColorQueues.has(groupKey)) {
-        localColorQueues.set(groupKey, new ColorQueue(state.decorations.length, areRandomColorsEnabled()));
+        localColorQueues.set(groupKey, new ColorQueue(state.decorations.length, areRandomColorsEnabled(), false));
     }
 
     state.words.fill(undefined);
@@ -459,6 +459,13 @@ export function clearAllLocalHighlights(chainGrepMap: Map<string, any>): number 
 
             if (localHighlightColorMaps.has(groupKey)) {
                 localHighlightColorMaps.get(groupKey)!.clear();
+            }
+
+            if (localColorQueues.has(groupKey)) {
+                localColorQueues.set(
+                    groupKey,
+                    new ColorQueue(state.decorations.length, areRandomColorsEnabled(), false)
+                );
             }
 
             state.words.fill(undefined);
@@ -536,12 +543,24 @@ export function restoreHighlightState(state: any) {
         }
 
         if (state.localHighlights) {
+            let restoredGroupCount = 0;
             for (const [key, stateObj] of state.localHighlights) {
-                const localState = getLocalHighlightState(key);
-                localState.words = stateObj.words;
-                localState.next = stateObj.next;
+                const hasActiveHighlights =
+                    Array.isArray(stateObj.words) &&
+                    stateObj.words.some(
+                        (word: string | undefined) => word !== undefined && word !== null && word.trim() !== ""
+                    );
+
+                if (hasActiveHighlights) {
+                    const localState = getLocalHighlightState(key);
+                    localState.words = stateObj.words;
+                    localState.next = stateObj.next;
+                    restoredGroupCount++;
+                } else {
+                    console.log(`Chain Grep: Skipping empty local highlight group for ${key}`);
+                }
             }
-            console.log(`Chain Grep: Restored local highlights for ${state.localHighlights.length} groups`);
+            console.log(`Chain Grep: Restored local highlights for ${restoredGroupCount} groups`);
         }
 
         if (state.globalHighlightColorMap) {
@@ -550,7 +569,9 @@ export function restoreHighlightState(state: any) {
 
         if (state.localHighlightColorMaps) {
             for (const [key, mapData] of state.localHighlightColorMaps) {
-                localHighlightColorMaps.set(key, new Map(mapData));
+                if (localHighlightMap.has(key)) {
+                    localHighlightColorMaps.set(key, new Map(mapData));
+                }
             }
         }
 
@@ -560,7 +581,9 @@ export function restoreHighlightState(state: any) {
 
         if (state.localColorIndexMaps) {
             for (const [key, indexes] of state.localColorIndexMaps) {
-                localColorIndexMaps.set(key, indexes);
+                if (localHighlightMap.has(key)) {
+                    localColorIndexMaps.set(key, indexes);
+                }
             }
         }
 
@@ -573,9 +596,11 @@ export function restoreHighlightState(state: any) {
 
         if (state.localColorQueues) {
             for (const [key, indexes] of state.localColorQueues) {
-                const queue = localColorQueues.get(key) || new ColorQueue(indexes.length, areRandomColorsEnabled());
-                queue.setIndexes(indexes);
-                localColorQueues.set(key, queue);
+                if (localHighlightMap.has(key)) {
+                    const queue = localColorQueues.get(key) || new ColorQueue(indexes.length, areRandomColorsEnabled());
+                    queue.setIndexes(indexes);
+                    localColorQueues.set(key, queue);
+                }
             }
         }
 

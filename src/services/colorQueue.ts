@@ -4,6 +4,7 @@ export class ColorQueue {
     private usedIndexes: Set<number>;
     private originalOrder: number[];
     private isReversedSequential: boolean;
+    private recentlyUsed: number[];
 
     constructor(length: number, isRandom: boolean = false, isReversedSequential: boolean = false) {
         this.originalOrder = Array.from({ length }, (_, i) => i);
@@ -17,6 +18,7 @@ export class ColorQueue {
         this.isRandom = isRandom;
         this.isReversedSequential = isReversedSequential;
         this.usedIndexes = new Set<number>();
+        this.recentlyUsed = [];
 
         if (isRandom) {
             this.indexes = shuffleArray([...this.indexes]);
@@ -26,7 +28,14 @@ export class ColorQueue {
     public getNextIndex(): number {
         if (this.indexes.length === 0) {
             if (this.isRandom) {
-                return this.originalOrder[Math.floor(Math.random() * this.originalOrder.length)];
+                const availableIndices = this.originalOrder.filter((idx) => !this.recentlyUsed.includes(idx));
+
+                if (availableIndices.length > 0) {
+                    this.indexes = shuffleArray([...availableIndices]);
+                } else {
+                    this.indexes = shuffleArray([...this.originalOrder]);
+                    this.recentlyUsed = [];
+                }
             } else if (this.isReversedSequential) {
                 return this.originalOrder[this.originalOrder.length - 1];
             } else {
@@ -42,11 +51,23 @@ export class ColorQueue {
 
         this.usedIndexes.add(index);
 
+        this.recentlyUsed.push(index);
+
+        const historyLength = Math.max(1, Math.floor(this.originalOrder.length / 3));
+        if (this.recentlyUsed.length > historyLength) {
+            this.recentlyUsed.shift();
+        }
+
         return index;
     }
 
     public releaseIndex(index: number): void {
         this.usedIndexes.delete(index);
+
+        const recentlyUsedIndex = this.recentlyUsed.indexOf(index);
+        if (recentlyUsedIndex !== -1) {
+            this.recentlyUsed.splice(recentlyUsedIndex, 1);
+        }
 
         if (!this.isRandom) {
             if (this.isReversedSequential) {
@@ -75,8 +96,14 @@ export class ColorQueue {
                 }
             }
         } else {
-            const position = Math.floor(Math.random() * (this.indexes.length + 1));
-            this.indexes.splice(position, 0, index);
+            const minPosition = Math.min(1, this.indexes.length);
+            const maxPosition = this.indexes.length;
+            if (maxPosition > 0) {
+                const position = minPosition + Math.floor(Math.random() * (maxPosition - minPosition));
+                this.indexes.splice(position, 0, index);
+            } else {
+                this.indexes.push(index);
+            }
         }
     }
 
@@ -95,6 +122,8 @@ export class ColorQueue {
                     this.indexes = [...availableIndexes].sort((a, b) => a - b);
                 }
             }
+
+            this.recentlyUsed = [];
         }
     }
 
@@ -111,6 +140,8 @@ export class ColorQueue {
                     this.indexes = availableIndexes.sort((a, b) => a - b);
                 }
             }
+
+            this.recentlyUsed = [];
         }
     }
 
@@ -122,6 +153,7 @@ export class ColorQueue {
         this.indexes = [...indexes];
 
         this.usedIndexes.clear();
+        this.recentlyUsed = [];
 
         for (let i = 0; i < this.originalOrder.length; i++) {
             const idx = this.originalOrder[i];
