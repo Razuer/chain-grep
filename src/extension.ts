@@ -453,9 +453,44 @@ async function executeChainSearchAndDisplayResults(
     parentDocUri?: string,
     label?: string
 ) {
+    // Generate the document URI first to check if it already exists
+    const docUri = generateChainGrepDocUri(sourceUri, chain);
+    const docUriStr = docUri.toString();
+
+    // Check if an identical document already exists in the map with content
+    let existingDocWithContent = false;
+    if (chainGrepMap.has(docUriStr) && chainGrepContents.has(docUriStr)) {
+        existingDocWithContent = true;
+
+        try {
+            // If it exists, just open it instead of creating a new one
+            const doc = await vscode.workspace.openTextDocument(docUri);
+            const editor = await vscode.window.showTextDocument(doc, {
+                preview: false,
+            });
+            reapplyHighlightsLocal(editor, chainGrepMap);
+
+            // Still update the tree view to ensure it's properly represented
+            const nodeLabel = label || chain[chain.length - 1].query;
+            if (parentDocUri) {
+                chainGrepProvider.addSubChain(parentDocUri, nodeLabel, chain, docUriStr);
+            } else {
+                chainGrepProvider.addRootChain(sourceUri.toString(), nodeLabel, chain, docUriStr);
+            }
+
+            showStatusMessage(`Chain Grep: Opened existing search results`);
+            return;
+        } catch (error) {
+            console.error("Failed to open existing chain grep document:", error);
+            existingDocWithContent = false;
+        }
+    }
+
+    // If we don't have an existing document with content, run the search
     const { lines: results, stats } = await executeChainSearch(sourceUri, chain);
     if (!results.length) {
         vscode.window.showInformationMessage("No matches found.");
+        return;
     } else {
         showStatusMessage(
             `Chain Grep: Found ${results.length} matches (${((results.length / stats.totalLines) * 100).toFixed(
@@ -472,10 +507,8 @@ async function executeChainSearchAndDisplayResults(
         content = results.join("\n");
     }
 
-    const docUri = generateChainGrepDocUri(sourceUri, chain);
-
-    chainGrepContents.set(docUri.toString(), content);
-    chainGrepMap.set(docUri.toString(), { chain, sourceUri });
+    chainGrepContents.set(docUriStr, content);
+    chainGrepMap.set(docUriStr, { chain, sourceUri });
 
     const doc = await vscode.workspace.openTextDocument(docUri);
     const editor = await vscode.window.showTextDocument(doc, {
@@ -485,9 +518,9 @@ async function executeChainSearchAndDisplayResults(
 
     const nodeLabel = label || chain[chain.length - 1].query;
     if (parentDocUri) {
-        chainGrepProvider.addSubChain(parentDocUri, nodeLabel, chain, docUri.toString());
+        chainGrepProvider.addSubChain(parentDocUri, nodeLabel, chain, docUriStr);
     } else {
-        chainGrepProvider.addRootChain(sourceUri.toString(), nodeLabel, chain, docUri.toString());
+        chainGrepProvider.addRootChain(sourceUri.toString(), nodeLabel, chain, docUriStr);
     }
 
     savePersistentState();

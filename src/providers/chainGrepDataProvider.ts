@@ -27,6 +27,12 @@ export class ChainGrepDataProvider implements vscode.TreeDataProvider<ChainGrepN
     }
 
     addRootChain(sourceUri: string, label: string, chain: ChainGrepQuery[], docUri: string) {
+        const existingNodeForDocUri = this.docUriToNode.get(docUri);
+        if (existingNodeForDocUri) {
+            this.refresh();
+            return;
+        }
+
         let root = this.fileRoots.get(sourceUri);
         if (!root) {
             const filename = this.extractFilenameFromUri(sourceUri);
@@ -58,6 +64,25 @@ export class ChainGrepDataProvider implements vscode.TreeDataProvider<ChainGrepN
 
         const displayLabel = `${prefix} "${label}"${flagsStr}`;
 
+        // Check if a node with identical chain already exists
+        const existingNode = root.children.find((child) => this.areChainQueriesEqual(child.chain, chain));
+
+        if (existingNode) {
+            console.log(
+                `Chain Grep: Found existing node with same chain, updating docUri from ${existingNode.docUri} to ${docUri}`
+            );
+
+            // Update docUriToNode mapping
+            if (existingNode.docUri) {
+                this.docUriToNode.delete(existingNode.docUri);
+            }
+            existingNode.docUri = docUri;
+            this.docUriToNode.set(docUri, existingNode);
+
+            this.refresh();
+            return;
+        }
+
         const childNode = new ChainGrepNode(
             displayLabel,
             vscode.TreeItemCollapsibleState.None,
@@ -73,6 +98,14 @@ export class ChainGrepDataProvider implements vscode.TreeDataProvider<ChainGrepN
     }
 
     addSubChain(parentDocUri: string, label: string, chain: ChainGrepQuery[], docUri: string) {
+        // Check if we already have this document in the tree view
+        const existingNodeForDocUri = this.docUriToNode.get(docUri);
+        if (existingNodeForDocUri) {
+            // Just refresh to make sure UI is up to date
+            this.refresh();
+            return;
+        }
+
         const parentNode = this.docUriToNode.get(parentDocUri);
         if (!parentNode) {
             this.addRootChain(parentDocUri, label, chain, docUri);
@@ -99,6 +132,25 @@ export class ChainGrepDataProvider implements vscode.TreeDataProvider<ChainGrepN
 
         const displayLabel = `${prefix} "${label}"${flagsStr}`;
 
+        // Check if a node with identical chain already exists
+        const existingNode = parentNode.children.find((child) => this.areChainQueriesEqual(child.chain, chain));
+
+        if (existingNode) {
+            console.log(
+                `Chain Grep: Found existing subchain node, updating docUri from ${existingNode.docUri} to ${docUri}`
+            );
+
+            // Update docUriToNode mapping
+            if (existingNode.docUri) {
+                this.docUriToNode.delete(existingNode.docUri);
+            }
+            existingNode.docUri = docUri;
+            this.docUriToNode.set(docUri, existingNode);
+
+            this.refresh();
+            return;
+        }
+
         const childNode = new ChainGrepNode(
             displayLabel,
             vscode.TreeItemCollapsibleState.None,
@@ -110,6 +162,30 @@ export class ChainGrepDataProvider implements vscode.TreeDataProvider<ChainGrepN
         this.docUriToNode.set(docUri, childNode);
         parentNode.children.push(childNode);
         this.refresh();
+    }
+
+    // Helper method to compare two chain queries for equality
+    private areChainQueriesEqual(chain1: ChainGrepQuery[], chain2: ChainGrepQuery[]): boolean {
+        if (chain1.length !== chain2.length) {
+            return false;
+        }
+
+        for (let i = 0; i < chain1.length; i++) {
+            const q1 = chain1[i];
+            const q2 = chain2[i];
+
+            if (
+                q1.type !== q2.type ||
+                q1.query !== q2.query ||
+                q1.inverted !== q2.inverted ||
+                q1.caseSensitive !== q2.caseSensitive ||
+                q1.flags !== q2.flags
+            ) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     removeNode(node: ChainGrepNode) {
