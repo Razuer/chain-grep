@@ -38,6 +38,10 @@ export function areScrollbarIndicatorsEnabled(): boolean {
     return getConfig<boolean>("showScrollbarIndicators", true);
 }
 
+export function isCleanupLoggingEnabled(): boolean {
+    return getConfig<boolean>("cleanupLogging", false);
+}
+
 export function isRegexValid(str: string): boolean {
     if (/^\/.*\/?[igm]{0,3}$/.test(str)) {
         return true;
@@ -62,13 +66,19 @@ let statusBarItem: vscode.StatusBarItem | undefined;
 
 export function getStatusBar(): vscode.StatusBarItem {
     if (!statusBarItem) {
-        statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+        statusBarItem = vscode.window.createStatusBarItem(
+            vscode.StatusBarAlignment.Right,
+            100
+        );
         statusBarItem.name = "Chain Grep";
     }
     return statusBarItem;
 }
 
-export function showStatusMessage(message: string, timeout: number = 5000): void {
+export function showStatusMessage(
+    message: string,
+    timeout: number = 5000
+): void {
     const statusBar = getStatusBar();
     statusBar.text = `$(sync) ${message}`;
     statusBar.show();
@@ -78,4 +88,9 @@ export function showStatusMessage(message: string, timeout: number = 5000): void
             statusBar.hide();
         }
     }, timeout);
+}
+
+export function getBookmarkColor(): string {
+    const config = vscode.workspace.getConfiguration("chainGrep");
+    return config.get<string>("bookmarkColor") || "#3794FF";
 }

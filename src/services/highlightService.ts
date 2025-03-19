@@ -1,7 +1,11 @@
 import * as vscode from "vscode";
 import { LocalHighlightState } from "../models/interfaces";
 import { ColorQueue } from "./colorQueue";
-import { loadConfiguredPalette, areRandomColorsEnabled, areScrollbarIndicatorsEnabled } from "./configService";
+import {
+    loadConfiguredPalette,
+    areRandomColorsEnabled,
+    areScrollbarIndicatorsEnabled,
+} from "./configService";
 import { escapeRegExp } from "../utils/utils";
 
 let highlightDecorations: vscode.TextEditorDecorationType[] = [];
@@ -33,7 +37,9 @@ function darkenColor(color: string): string {
     g = Math.max(0, g);
     b = Math.max(0, b);
 
-    return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+    return `#${r.toString(16).padStart(2, "0")}${g
+        .toString(16)
+        .padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
 }
 
 export function initHighlightDecorations() {
@@ -53,7 +59,11 @@ export function initHighlightDecorations() {
         globalHighlightWords = [];
     }
 
-    globalColorQueue = new ColorQueue(globalColoursArr.length, areRandomColorsEnabled(), true);
+    globalColorQueue = new ColorQueue(
+        globalColoursArr.length,
+        areRandomColorsEnabled(),
+        true
+    );
 
     const showScrollbarIndicators = areScrollbarIndicatorsEnabled();
 
@@ -71,17 +81,25 @@ export function initHighlightDecorations() {
 
         if (showScrollbarIndicators) {
             decorationOptions.overviewRulerColor = bg;
-            decorationOptions.overviewRulerLane = vscode.OverviewRulerLane.Right;
+            decorationOptions.overviewRulerLane =
+                vscode.OverviewRulerLane.Right;
         }
 
-        highlightDecorations.push(vscode.window.createTextEditorDecorationType(decorationOptions));
+        highlightDecorations.push(
+            vscode.window.createTextEditorDecorationType(decorationOptions)
+        );
         if (globalHighlightWords.length < highlightDecorations.length) {
             globalHighlightWords.push(undefined);
         }
     });
 
-    console.log(`Chain Grep: Initialized ${highlightDecorations.length} global highlight decorations`);
+    console.log(
+        `Chain Grep: Initialized ${highlightDecorations.length} global highlight decorations`
+    );
 }
+
+// Alias for compatibility with both versions
+export const initGlobalHighlightDecorations = initHighlightDecorations;
 
 function chooseNextGlobalHighlight(): number {
     return globalColorQueue.getNextIndex();
@@ -97,9 +115,17 @@ export function addHighlightGlobal(editor: vscode.TextEditor, text: string) {
     applyHighlightForTextGlobal(editor, text, idx);
 }
 
-function applyHighlightForTextGlobal(editor: vscode.TextEditor, text: string, idx: number) {
+function applyHighlightForTextGlobal(
+    editor: vscode.TextEditor,
+    text: string,
+    idx: number
+) {
     if (idx >= highlightDecorations.length) {
-        console.error(`Chain Grep: Invalid highlight index ${idx}, max is ${highlightDecorations.length - 1}`);
+        console.error(
+            `Chain Grep: Invalid highlight index ${idx}, max is ${
+                highlightDecorations.length - 1
+            }`
+        );
         return;
     }
 
@@ -160,7 +186,9 @@ export function toggleHighlightGlobal(
 export function clearHighlightsGlobal(showMessage = true): boolean {
     if (globalHighlightWords.every((w) => w === undefined)) {
         if (showMessage) {
-            vscode.window.showInformationMessage("Chain Grep: No global highlights to clear");
+            vscode.window.showInformationMessage(
+                "Chain Grep: No global highlights to clear"
+            );
         }
         return false;
     }
@@ -174,11 +202,17 @@ export function clearHighlightsGlobal(showMessage = true): boolean {
     globalHighlightColorMap.clear();
 
     if (globalColorQueue) {
-        globalColorQueue = new ColorQueue(highlightDecorations.length, areRandomColorsEnabled(), true);
+        globalColorQueue = new ColorQueue(
+            highlightDecorations.length,
+            areRandomColorsEnabled(),
+            true
+        );
     }
 
     if (showMessage) {
-        vscode.window.showInformationMessage("Chain Grep: Cleared all global highlights");
+        vscode.window.showInformationMessage(
+            "Chain Grep: Cleared all global highlights"
+        );
     }
 
     return true;
@@ -206,7 +240,10 @@ export function reapplyHighlightsGlobal(editor: vscode.TextEditor) {
     }
 }
 
-export function getLocalHighlightKey(docUri: string, chainGrepMap: Map<string, any>): string {
+export function getLocalHighlightKey(
+    docUri: string,
+    chainGrepMap: Map<string, any>
+): string {
     if (chainGrepMap.has(docUri)) {
         const chainInfo = chainGrepMap.get(docUri)!;
         return chainInfo.sourceUri.toString();
@@ -228,7 +265,9 @@ export function getLocalHighlightState(groupKey: string): LocalHighlightState {
     return existing;
 }
 
-function createHighlightDecorationsFromColours(groupKey: string): vscode.TextEditorDecorationType[] {
+function createHighlightDecorationsFromColours(
+    groupKey: string
+): vscode.TextEditorDecorationType[] {
     let palette = loadConfiguredPalette();
     let coloursArr = palette.split(",").map((pair) =>
         pair
@@ -237,7 +276,10 @@ function createHighlightDecorationsFromColours(groupKey: string): vscode.TextEdi
             .map((c) => c.trim())
     );
 
-    localColorQueues.set(groupKey, new ColorQueue(coloursArr.length, areRandomColorsEnabled(), false));
+    localColorQueues.set(
+        groupKey,
+        new ColorQueue(coloursArr.length, areRandomColorsEnabled(), false)
+    );
 
     const showScrollbarIndicators = areScrollbarIndicatorsEnabled();
 
@@ -251,7 +293,8 @@ function createHighlightDecorationsFromColours(groupKey: string): vscode.TextEdi
 
         if (showScrollbarIndicators) {
             decorationOptions.overviewRulerColor = bg;
-            decorationOptions.overviewRulerLane = vscode.OverviewRulerLane.Right;
+            decorationOptions.overviewRulerLane =
+                vscode.OverviewRulerLane.Right;
         }
 
         return vscode.window.createTextEditorDecorationType(decorationOptions);
@@ -261,13 +304,20 @@ function createHighlightDecorationsFromColours(groupKey: string): vscode.TextEdi
 function chooseNextLocalHighlight(groupKey: string): number {
     if (!localColorQueues.has(groupKey)) {
         const state = getLocalHighlightState(groupKey);
-        localColorQueues.set(groupKey, new ColorQueue(state.decorations.length, areRandomColorsEnabled()));
+        localColorQueues.set(
+            groupKey,
+            new ColorQueue(state.decorations.length, areRandomColorsEnabled())
+        );
     }
 
     return localColorQueues.get(groupKey)!.getNextIndex();
 }
 
-export function addHighlightLocal(editor: vscode.TextEditor, text: string, chainGrepMap: Map<string, any>) {
+export function addHighlightLocal(
+    editor: vscode.TextEditor,
+    text: string,
+    chainGrepMap: Map<string, any>
+) {
     const docUri = editor.document.uri.toString();
     const groupKey = getLocalHighlightKey(docUri, chainGrepMap);
     const state = getLocalHighlightState(groupKey);
@@ -306,7 +356,10 @@ function applyHighlightForTextLocal(
     }
 
     function decorateSingle(ed: vscode.TextEditor) {
-        if (getLocalHighlightKey(ed.document.uri.toString(), chainGrepMap) !== groupKey) {
+        if (
+            getLocalHighlightKey(ed.document.uri.toString(), chainGrepMap) !==
+            groupKey
+        ) {
             return;
         }
         const fullText = ed.document.getText();
@@ -327,13 +380,20 @@ function applyHighlightForTextLocal(
         if (ed === editor) {
             continue;
         }
-        if (getLocalHighlightKey(ed.document.uri.toString(), chainGrepMap) === groupKey) {
+        if (
+            getLocalHighlightKey(ed.document.uri.toString(), chainGrepMap) ===
+            groupKey
+        ) {
             decorateSingle(ed);
         }
     }
 }
 
-export function removeHighlightForTextLocal(docUri: string, text: string, chainGrepMap: Map<string, any>) {
+export function removeHighlightForTextLocal(
+    docUri: string,
+    text: string,
+    chainGrepMap: Map<string, any>
+) {
     const groupKey = getLocalHighlightKey(docUri, chainGrepMap);
     const state = getLocalHighlightState(groupKey);
     const idx = state.words.findIndex((w) => w === text);
@@ -342,7 +402,10 @@ export function removeHighlightForTextLocal(docUri: string, text: string, chainG
     }
 
     for (const ed of vscode.window.visibleTextEditors) {
-        if (getLocalHighlightKey(ed.document.uri.toString(), chainGrepMap) === groupKey) {
+        if (
+            getLocalHighlightKey(ed.document.uri.toString(), chainGrepMap) ===
+            groupKey
+        ) {
             ed.setDecorations(state.decorations[idx], []);
         }
     }
@@ -362,7 +425,9 @@ export function toggleHighlightLocal(
         return;
     }
 
-    const globalHighlightIndex = globalHighlightWords.findIndex((w) => w === text);
+    const globalHighlightIndex = globalHighlightWords.findIndex(
+        (w) => w === text
+    );
     if (globalHighlightIndex !== -1) {
         removeHighlightForTextGlobal(text);
     }
@@ -378,13 +443,19 @@ export function toggleHighlightLocal(
     }
 }
 
-export function clearHighlightsLocal(editor: vscode.TextEditor, chainGrepMap: Map<string, any>) {
+export function clearHighlightsLocal(
+    editor: vscode.TextEditor,
+    chainGrepMap: Map<string, any>
+) {
     const docUri = editor.document.uri.toString();
     const groupKey = getLocalHighlightKey(docUri, chainGrepMap);
     const state = getLocalHighlightState(groupKey);
 
     for (const ed of vscode.window.visibleTextEditors) {
-        if (getLocalHighlightKey(ed.document.uri.toString(), chainGrepMap) === groupKey) {
+        if (
+            getLocalHighlightKey(ed.document.uri.toString(), chainGrepMap) ===
+            groupKey
+        ) {
             state.decorations.forEach((dec) => {
                 ed.setDecorations(dec, []);
             });
@@ -396,14 +467,24 @@ export function clearHighlightsLocal(editor: vscode.TextEditor, chainGrepMap: Ma
     }
 
     if (localColorQueues.has(groupKey)) {
-        localColorQueues.set(groupKey, new ColorQueue(state.decorations.length, areRandomColorsEnabled(), false));
+        localColorQueues.set(
+            groupKey,
+            new ColorQueue(
+                state.decorations.length,
+                areRandomColorsEnabled(),
+                false
+            )
+        );
     }
 
     state.words.fill(undefined);
     state.next = 0;
 }
 
-export function reapplyHighlightsLocal(editor: vscode.TextEditor, chainGrepMap: Map<string, any>) {
+export function reapplyHighlightsLocal(
+    editor: vscode.TextEditor,
+    chainGrepMap: Map<string, any>
+) {
     const docUri = editor.document.uri.toString();
     const groupKey = getLocalHighlightKey(docUri, chainGrepMap);
     const state = getLocalHighlightState(groupKey);
@@ -419,7 +500,9 @@ export function reapplyHighlightsLocal(editor: vscode.TextEditor, chainGrepMap: 
 export function applyHighlightsToOpenEditors(chainGrepMap: Map<string, any>) {
     try {
         if (highlightDecorations.length === 0) {
-            console.log("Chain Grep: Initializing global highlights before applying");
+            console.log(
+                "Chain Grep: Initializing global highlights before applying"
+            );
             initHighlightDecorations();
         }
 
@@ -429,17 +512,26 @@ export function applyHighlightsToOpenEditors(chainGrepMap: Map<string, any>) {
             reapplyHighlightsLocal(editor, chainGrepMap);
         }
 
-        console.log("Chain Grep: Successfully applied highlights to all open editors");
+        console.log(
+            "Chain Grep: Successfully applied highlights to all open editors"
+        );
         return true;
     } catch (error) {
-        console.error("Chain Grep: Error applying highlights to editors", error);
+        console.error(
+            "Chain Grep: Error applying highlights to editors",
+            error
+        );
         return false;
     }
 }
 
-export function clearAllLocalHighlights(chainGrepMap: Map<string, any>): number {
+export function clearAllLocalHighlights(
+    chainGrepMap: Map<string, any>
+): number {
     if (localHighlightMap.size === 0) {
-        vscode.window.showInformationMessage("Chain Grep: No chained highlights to clear");
+        vscode.window.showInformationMessage(
+            "Chain Grep: No chained highlights to clear"
+        );
         return 0;
     }
 
@@ -450,7 +542,12 @@ export function clearAllLocalHighlights(chainGrepMap: Map<string, any>): number 
             clearedCount++;
 
             for (const ed of vscode.window.visibleTextEditors) {
-                if (getLocalHighlightKey(ed.document.uri.toString(), chainGrepMap) === groupKey) {
+                if (
+                    getLocalHighlightKey(
+                        ed.document.uri.toString(),
+                        chainGrepMap
+                    ) === groupKey
+                ) {
                     state.decorations.forEach((dec) => {
                         ed.setDecorations(dec, []);
                     });
@@ -464,7 +561,11 @@ export function clearAllLocalHighlights(chainGrepMap: Map<string, any>): number 
             if (localColorQueues.has(groupKey)) {
                 localColorQueues.set(
                     groupKey,
-                    new ColorQueue(state.decorations.length, areRandomColorsEnabled(), false)
+                    new ColorQueue(
+                        state.decorations.length,
+                        areRandomColorsEnabled(),
+                        false
+                    )
                 );
             }
 
@@ -474,9 +575,13 @@ export function clearAllLocalHighlights(chainGrepMap: Map<string, any>): number 
     }
 
     if (clearedCount > 0) {
-        vscode.window.showInformationMessage(`Chain Grep: Cleared chained highlights for ${clearedCount} document(s)`);
+        vscode.window.showInformationMessage(
+            `Chain Grep: Cleared chained highlights for ${clearedCount} document(s)`
+        );
     } else {
-        vscode.window.showInformationMessage("Chain Grep: No chained highlights found to clear");
+        vscode.window.showInformationMessage(
+            "Chain Grep: No chained highlights found to clear"
+        );
     }
 
     return clearedCount;
@@ -487,17 +592,17 @@ export function getHighlightState() {
         globalHighlightWords,
         globalHighlightColorMap: Array.from(globalHighlightColorMap.entries()),
         globalColorIndexes,
-        localHighlights: Array.from(localHighlightMap.entries()).map(([key, state]) => [
-            key,
-            { words: state.words, next: state.next },
-        ]),
-        localHighlightColorMaps: Array.from(localHighlightColorMaps.entries()).map(([key, map]) => [
-            key,
-            Array.from(map.entries()),
-        ]),
+        localHighlights: Array.from(localHighlightMap.entries()).map(
+            ([key, state]) => [key, { words: state.words, next: state.next }]
+        ),
+        localHighlightColorMaps: Array.from(
+            localHighlightColorMaps.entries()
+        ).map(([key, map]) => [key, Array.from(map.entries())]),
         localColorIndexMaps: Array.from(localColorIndexMaps.entries()),
         globalColorQueue: globalColorQueue ? globalColorQueue.getIndexes() : [],
-        localColorQueues: Array.from(localColorQueues.entries()).map(([key, queue]) => [key, queue.getIndexes()]),
+        localColorQueues: Array.from(localColorQueues.entries()).map(
+            ([key, queue]) => [key, queue.getIndexes()]
+        ),
     };
 
     console.log(
@@ -516,12 +621,17 @@ export function restoreHighlightState(state: any) {
         }
 
         if (highlightDecorations.length === 0) {
-            console.log("Chain Grep: Creating decorations before restoring state");
+            console.log(
+                "Chain Grep: Creating decorations before restoring state"
+            );
             initHighlightDecorations();
         }
 
         if (state.globalHighlightWords) {
-            const words = state.globalHighlightWords.slice(0, highlightDecorations.length);
+            const words = state.globalHighlightWords.slice(
+                0,
+                highlightDecorations.length
+            );
             while (globalHighlightWords.length < words.length) {
                 globalHighlightWords.push(undefined);
             }
@@ -534,11 +644,14 @@ export function restoreHighlightState(state: any) {
             }
 
             const definedWords = words.filter(
-                (w: string | undefined): w is string => w !== undefined && w !== null && w.trim() !== ""
+                (w: string | undefined): w is string =>
+                    w !== undefined && w !== null && w.trim() !== ""
             );
 
             if (definedWords.length > 0) {
-                console.log(`Chain Grep: Restored ${definedWords.length} global highlight words`);
+                console.log(
+                    `Chain Grep: Restored ${definedWords.length} global highlight words`
+                );
             }
         }
 
@@ -548,7 +661,10 @@ export function restoreHighlightState(state: any) {
                 const hasActiveHighlights =
                     Array.isArray(stateObj.words) &&
                     stateObj.words.some(
-                        (word: string | undefined) => word !== undefined && word !== null && word.trim() !== ""
+                        (word: string | undefined) =>
+                            word !== undefined &&
+                            word !== null &&
+                            word.trim() !== ""
                     );
 
                 if (hasActiveHighlights) {
@@ -557,10 +673,14 @@ export function restoreHighlightState(state: any) {
                     localState.next = stateObj.next;
                     restoredGroupCount++;
                 } else {
-                    console.log(`Chain Grep: Skipping empty local highlight group for ${key}`);
+                    console.log(
+                        `Chain Grep: Skipping empty local highlight group for ${key}`
+                    );
                 }
             }
-            console.log(`Chain Grep: Restored local highlights for ${restoredGroupCount} groups`);
+            console.log(
+                `Chain Grep: Restored local highlights for ${restoredGroupCount} groups`
+            );
         }
 
         if (state.globalHighlightColorMap) {
@@ -589,7 +709,10 @@ export function restoreHighlightState(state: any) {
 
         if (state.globalColorQueue) {
             if (!globalColorQueue) {
-                globalColorQueue = new ColorQueue(highlightDecorations.length, areRandomColorsEnabled());
+                globalColorQueue = new ColorQueue(
+                    highlightDecorations.length,
+                    areRandomColorsEnabled()
+                );
             }
             globalColorQueue.setIndexes(state.globalColorQueue);
         }
@@ -597,7 +720,12 @@ export function restoreHighlightState(state: any) {
         if (state.localColorQueues) {
             for (const [key, indexes] of state.localColorQueues) {
                 if (localHighlightMap.has(key)) {
-                    const queue = localColorQueues.get(key) || new ColorQueue(indexes.length, areRandomColorsEnabled());
+                    const queue =
+                        localColorQueues.get(key) ||
+                        new ColorQueue(
+                            indexes.length,
+                            areRandomColorsEnabled()
+                        );
                     queue.setIndexes(indexes);
                     localColorQueues.set(key, queue);
                 }
@@ -610,8 +738,13 @@ export function restoreHighlightState(state: any) {
     }
 }
 
-export function resetAllHighlightDecorations(chainGrepMap: Map<string, any>, clearHighlights: boolean = false): void {
-    console.log(`Chain Grep: Resetting all highlight decorations (clearHighlights: ${clearHighlights})`);
+export function resetAllHighlightDecorations(
+    chainGrepMap: Map<string, any>,
+    clearHighlights: boolean = false
+): void {
+    console.log(
+        `Chain Grep: Resetting all highlight decorations (clearHighlights: ${clearHighlights})`
+    );
 
     try {
         highlightDecorations.forEach((decoration) => decoration.dispose());
@@ -622,7 +755,10 @@ export function resetAllHighlightDecorations(chainGrepMap: Map<string, any>, cle
 
         if (clearHighlights) {
             const savedGlobalWords = [...globalHighlightWords];
-            const savedLocalStates = new Map<string, { words: (string | undefined)[]; next: number }>();
+            const savedLocalStates = new Map<
+                string,
+                { words: (string | undefined)[]; next: number }
+            >();
 
             for (const [groupKey, state] of localHighlightMap.entries()) {
                 savedLocalStates.set(groupKey, {
@@ -642,7 +778,15 @@ export function resetAllHighlightDecorations(chainGrepMap: Map<string, any>, cle
             initHighlightDecorations();
 
             if (!clearHighlights) {
-                for (let i = 0; i < Math.min(savedGlobalWords.length, globalHighlightWords.length); i++) {
+                for (
+                    let i = 0;
+                    i <
+                    Math.min(
+                        savedGlobalWords.length,
+                        globalHighlightWords.length
+                    );
+                    i++
+                ) {
                     globalHighlightWords[i] = savedGlobalWords[i];
 
                     const word = savedGlobalWords[i];
@@ -651,15 +795,26 @@ export function resetAllHighlightDecorations(chainGrepMap: Map<string, any>, cle
                     }
                 }
 
-                for (const [groupKey, savedState] of savedLocalStates.entries()) {
+                for (const [
+                    groupKey,
+                    savedState,
+                ] of savedLocalStates.entries()) {
                     const state = getLocalHighlightState(groupKey);
-                    for (let i = 0; i < Math.min(savedState.words.length, state.words.length); i++) {
+                    for (
+                        let i = 0;
+                        i <
+                        Math.min(savedState.words.length, state.words.length);
+                        i++
+                    ) {
                         state.words[i] = savedState.words[i];
                     }
                     state.next = savedState.next;
 
                     if (!localHighlightColorMaps.has(groupKey)) {
-                        localHighlightColorMaps.set(groupKey, new Map<string, number>());
+                        localHighlightColorMaps.set(
+                            groupKey,
+                            new Map<string, number>()
+                        );
                     }
                     for (let i = 0; i < savedState.words.length; i++) {
                         const word = savedState.words[i];
@@ -679,8 +834,13 @@ export function resetAllHighlightDecorations(chainGrepMap: Map<string, any>, cle
         }
 
         applyHighlightsToOpenEditors(chainGrepMap);
-        console.log("Chain Grep: Successfully reset and reapplied all highlight decorations");
+        console.log(
+            "Chain Grep: Successfully reset and reapplied all highlight decorations"
+        );
     } catch (error) {
-        console.error("Chain Grep: Error resetting highlight decorations", error);
+        console.error(
+            "Chain Grep: Error resetting highlight decorations",
+            error
+        );
     }
 }

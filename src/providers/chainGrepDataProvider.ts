@@ -7,7 +7,7 @@ export class ChainGrepDataProvider implements vscode.TreeDataProvider<ChainGrepN
     readonly onDidChangeTreeData: vscode.Event<ChainGrepNode | undefined | void> = this._onDidChangeTreeData.event;
 
     private fileRoots: Map<string, ChainGrepNode> = new Map();
-    private docUriToNode: Map<string, ChainGrepNode> = new Map();
+    public docUriToNode: Map<string, ChainGrepNode> = new Map();
 
     refresh(): void {
         this._onDidChangeTreeData.fire();
@@ -23,6 +23,10 @@ export class ChainGrepDataProvider implements vscode.TreeDataProvider<ChainGrepN
         } else {
             return Promise.resolve(element.children);
         }
+    }
+
+    getParent(element: ChainGrepNode): vscode.ProviderResult<ChainGrepNode> {
+        return element.parent;
     }
 
     addRootChain(sourceUri: string, label: string, chain: ChainGrepQuery[], docUri: string) {
@@ -206,5 +210,9 @@ export class ChainGrepDataProvider implements vscode.TreeDataProvider<ChainGrepN
 
     getAllRoots(): ChainGrepNode[] {
         return Array.from(this.fileRoots.values());
+    }
+
+    public findRootNodeBySourceUri(sourceUri: string): ChainGrepNode | undefined {
+        return this.fileRoots.get(sourceUri);
     }
 }
