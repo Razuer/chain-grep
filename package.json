@@ -92,6 +92,34 @@
                     "light": "icons/light/remove-global-highlights.svg",
                     "dark": "icons/dark/remove-global-highlights.svg"
                 }
+            },
+            {
+                "command": "chainGrep.addBookmark",
+                "title": "Chain Grep: Add Bookmark",
+                "icon": "$(bookmark)"
+            },
+            {
+                "command": "_chainGrep.openBookmark",
+                "title": "Open Bookmark"
+            },
+            {
+                "command": "chainGrep.openCurrentLineBookmark",
+                "title": "Chain Grep: Open Linked Bookmark"
+            },
+            {
+                "command": "_chainGrep.removeBookmark",
+                "title": "Remove Bookmark",
+                "icon": "$(remove)"
+            },
+            {
+                "command": "chainGrep.clearBookmarks",
+                "title": "Chain Grep: Clear All Bookmarks",
+                "icon": "$(clear-all)"
+            },
+            {
+                "command": "chainGrep.clearCurrentDocBookmarks",
+                "title": "Chain Grep: Clear Document Bookmarks",
+                "icon": "$(close)"
             }
         ],
         "keybindings": [
@@ -103,6 +131,11 @@
             {
                 "command": "chainGrep.toggleHighlight",
                 "key": "ctrl+alt+m",
+                "when": "editorTextFocus"
+            },
+            {
+                "command": "chainGrep.addBookmark",
+                "key": "ctrl+alt+b",
                 "when": "editorTextFocus"
             }
         ],
@@ -119,8 +152,15 @@
             "chainGrepViewContainer": [
                 {
                     "id": "chainGrepView",
-                    "name": "Chain Grep",
-                    "icon": "icons/chain-grep-icon.svg"
+                    "name": "Chain Results",
+                    "icon": "icons/chain-grep-icon.svg",
+                    "when": "true"
+                },
+                {
+                    "id": "chainGrepBookmarks",
+                    "name": "Bookmarks",
+                    "icon": "$(bookmark)",
+                    "when": "true"
                 }
             ]
         },
@@ -128,6 +168,16 @@
             {
                 "view": "chainGrepView",
                 "contents": "No chain grep results yet.\n\nOpen some file and use the following commands to start:\n\n[Grep Text](command:chainGrep.grepText)\n[Grep Regex](command:chainGrep.grepRegex)\n[Grep Selection](command:chainGrep.grepSelection)"
+            },
+            {
+                "view": "chainGrepBookmarks",
+                "contents": "No bookmarks yet.\n\nPress Ctrl+Alt+B or right-click to add a bookmark at the current line.\n\nBookmarks work in both Chain Grep documents and files."
+            }
+        ],
+        "submenus": [
+            {
+                "id": "chainGrep.contextSubmenu",
+                "label": "Chain Grep"
             }
         ],
         "menus": {
@@ -147,6 +197,14 @@
                 {
                     "command": "_chainGrep.refreshAndOpenNode",
                     "when": "false"
+                },
+                {
+                    "command": "_chainGrep.openBookmark",
+                    "when": "false"
+                },
+                {
+                    "command": "_chainGrep.removeBookmark",
+                    "when": "false"
                 }
             ],
             "view/title": [
@@ -164,6 +222,16 @@
                     "command": "chainGrep.closeAllNodes",
                     "when": "view == chainGrepView",
                     "group": "navigation@3"
+                },
+                {
+                    "command": "chainGrep.clearBookmarks",
+                    "when": "view == chainGrepBookmarks",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "chainGrep.clearCurrentDocBookmarks",
+                    "when": "view == chainGrepBookmarks && editorIsOpen",
+                    "group": "navigation@2"
                 }
             ],
             "view/item/context": [
@@ -176,6 +244,54 @@
                     "command": "_chainGrep.closeNode",
                     "when": "viewItem == chainGrep.chainNode || viewItem == chainGrep.fileRoot",
                     "group": "inline@50"
+                },
+                {
+                    "command": "_chainGrep.removeBookmark",
+                    "when": "viewItem == chainGrep.bookmark",
+                    "group": "inline"
+                }
+            ],
+            "editor/context": [
+                {
+                    "submenu": "chainGrep.contextSubmenu",
+                    "group": "chain-grep@1"
+                },
+                {
+                    "command": "chainGrep.openCurrentLineBookmark",
+                    "when": "editorHasBookmark",
+                    "group": "chain-grep@2"
+                }
+            ],
+            "chainGrep.contextSubmenu": [
+                {
+                    "command": "chainGrep.grepText",
+                    "group": "search@1"
+                },
+                {
+                    "command": "chainGrep.grepRegex",
+                    "group": "search@2"
+                },
+                {
+                    "command": "chainGrep.grepSelection",
+                    "group": "search@3",
+                    "when": "editorHasSelection"
+                },
+                {
+                    "command": "chainGrep.addBookmark",
+                    "group": "bookmark@1"
+                },
+                {
+                    "command": "chainGrep.toggleHighlight",
+                    "group": "highlight@1"
+                },
+                {
+                    "command": "chainGrep.toggleHighlightGlobal",
+                    "group": "highlight@2"
+                },
+                {
+                    "command": "chainGrep.refresh",
+                    "group": "refresh@1",
+                    "when": "resourceScheme == 'chaingrep'"
                 }
             ]
         },
@@ -186,6 +302,11 @@
                     "type": "string",
                     "default": "#89CFF0:black, #FF6961:black, #77DD77:black, #C3A8FF:black, #FDFD96:black, #A0E7E5:black, #FFB7CE:black, #CCFF90:black, #B19CD9:black, #FF82A9:black, #A8BFFF:black, #FFDAB9:black, #A8D0FF:black, #FFE680:black, #A8E0FF:black, #FFCBA4:black, #E6A8D7:black, #FFCCD2:black, #ACE1AF:black, #FF99FF:black",
                     "description": "Comma-separated list of background:foreground color pairs for highlights. Leave empty for default set."
+                },
+                "chainGrep.bookmarkColor": {
+                    "type": "string",
+                    "default": "#3794FF",
+                    "description": "Color for bookmark indicators. Use CSS color format."
                 },
                 "chainGrep.randomColors": {
                     "type": "boolean",

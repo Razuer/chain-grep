@@ -18,3 +18,21 @@ export interface LocalHighlightState {
     words: (string | undefined)[];
     next: number;
 }
+
+export interface Bookmark {
+    id: string;
+    lineNumber: number;
+    lineText: string;
+    docUri: string;
+    sourceUri: string;
+    label?: string;
+    timestamp: number;
+    linkedBookmarkId?: string;
+
+    context?: {
+        beforeLines?: string[];
+        afterLines?: string[];
+        occurrenceIndex?: number;
+        relativePosition?: number;
+    };
+}

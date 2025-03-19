@@ -66,3 +66,8 @@ export function isRegexValid(str: string): boolean {
     }
     return slashCount !== 1;
 }
+
+export function getBookmarkColor(): string {
+    const config = vscode.workspace.getConfiguration("chainGrep");
+    return config.get<string>("bookmarkColor") || "#3794FF";
+}

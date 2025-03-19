@@ -2,12 +2,14 @@ import * as vscode from "vscode";
 import { debounce } from "../utils/utils";
 import { getHighlightState, restoreHighlightState } from "./highlightService";
 import { ChainGrepDataProvider } from "../providers/chainGrepDataProvider";
+import { BookmarkProvider } from "../providers/bookmarkProvider";
+import { Bookmark } from "../models/interfaces";
 
 let extensionContext: vscode.ExtensionContext;
 
-// Data stores that need to be persisted
 const chainGrepMap: Map<string, any> = new Map();
 const chainGrepContents: Map<string, string> = new Map();
+let bookmarkProvider: BookmarkProvider | undefined;
 
 const debouncedSavePersistentState = debounce(() => {
     const chainData = Array.from(chainGrepMap.entries()).map(([uri, data]) => [
@@ -17,11 +19,13 @@ const debouncedSavePersistentState = debounce(() => {
     const contentsData = Array.from(chainGrepContents.entries());
 
     const persistentHighlights = getHighlightState();
+    const bookmarks = bookmarkProvider ? bookmarkProvider.getAllBookmarks() : [];
 
     extensionContext.workspaceState.update("chainGrepState", {
         chainData,
         contentsData,
         persistentHighlights,
+        bookmarks,
     });
 
     console.log("Chain Grep: State saved");
@@ -39,33 +43,41 @@ export function savePersistentState() {
     debouncedSavePersistentState();
 }
 
-export function loadPersistentState(context: vscode.ExtensionContext, chainGrepProvider: ChainGrepDataProvider) {
+export function loadPersistentState(
+    context: vscode.ExtensionContext,
+    chainGrepProvider: ChainGrepDataProvider,
+    bookmarkProv?: BookmarkProvider
+) {
     extensionContext = context;
+    bookmarkProvider = bookmarkProv;
 
-    const stored = context.workspaceState.get<any>("chainGrepState");
-    if (!stored) {
-        return;
-    }
-
-    if (stored.chainData) {
-        for (const [uri, data] of stored.chainData) {
-            chainGrepMap.set(uri, {
-                chain: data.chain,
-                sourceUri: vscode.Uri.parse(data.sourceUri),
-            });
+    const state = context.workspaceState.get("chainGrepState") as any;
+    if (state) {
+        if (state.chainData) {
+            for (const [uri, data] of state.chainData) {
+                chainGrepMap.set(uri, {
+                    chain: data.chain,
+                    sourceUri: vscode.Uri.parse(data.sourceUri),
+                });
+            }
         }
-    }
-    if (stored.contentsData) {
-        for (const [uri, content] of stored.contentsData) {
-            chainGrepContents.set(uri, content);
+
+        if (state.contentsData) {
+            for (const [uri, content] of state.contentsData) {
+                chainGrepContents.set(uri, content);
+            }
         }
-    }
 
-    if (stored.persistentHighlights) {
-        restoreHighlightState(stored.persistentHighlights);
-    }
+        if (state.persistentHighlights) {
+            restoreHighlightState(state.persistentHighlights);
+        }
 
-    rebuildTreeViewFromState(chainGrepProvider);
+        if (state.bookmarks && bookmarkProvider) {
+            bookmarkProvider.loadFromState(state.bookmarks);
+        }
+
+        rebuildTreeViewFromState(chainGrepProvider);
+    }
 }
 
 export function setContext(context: vscode.ExtensionContext) {
