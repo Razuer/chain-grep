@@ -44,11 +44,32 @@ export class BookmarkNode extends vscode.TreeItem {
     private setupBookmarkNode(bookmark: Bookmark) {
         this.tooltip = this.getBookmarkTooltip(bookmark);
 
+        // Najpierw sprawdzamy, czy to odnośnik do pliku źródłowego
+        if (
+            this.parent &&
+            this.parent.type === BookmarkNodeType.Category &&
+            !bookmark.docUri
+        ) {
+            this.sourceFileReference = true;
+            this.label = "Source File";
+            this.iconPath = new vscode.ThemeIcon("file-code");
+            this.description = `Line ${bookmark.lineNumber + 1}`;
+            this.contextValue = "chainGrep.sourceFileRef";
+            this.command = {
+                title: "Open Bookmark",
+                command: "_chainGrep.openBookmark",
+                arguments: [this],
+            };
+            return;
+        }
+
         if (this.sourceFileReference === true) {
             // Odnośnik do pliku źródłowego powinien pokazywać nazwę pliku
             this.iconPath = new vscode.ThemeIcon("file-code");
             try {
-                const fileName = path.basename(vscode.Uri.parse(bookmark.sourceUri).fsPath);
+                const fileName = path.basename(
+                    vscode.Uri.parse(bookmark.sourceUri).fsPath
+                );
                 this.label = fileName;
                 this.description = `Line ${bookmark.lineNumber + 1}`;
             } catch {
@@ -61,7 +82,10 @@ export class BookmarkNode extends vscode.TreeItem {
                 command: "_chainGrep.openBookmark",
                 arguments: [this],
             };
-        } else if (bookmark.docUri && bookmark.docUri.startsWith("chaingrep:")) {
+        } else if (
+            bookmark.docUri &&
+            bookmark.docUri.startsWith("chaingrep:")
+        ) {
             // Pełna informacja dla węzłów Chain Grep
             this.iconPath = new vscode.ThemeIcon("link");
 
@@ -70,12 +94,21 @@ export class BookmarkNode extends vscode.TreeItem {
                 const chainGrepMap = getChainGrepMap();
                 const chainInfo = chainGrepMap.get(bookmark.docUri);
 
-                if (chainInfo && chainInfo.chain && chainInfo.chain.length > 0) {
+                if (
+                    chainInfo &&
+                    chainInfo.chain &&
+                    chainInfo.chain.length > 0
+                ) {
                     // Mamy informacje o łańcuchu zapytań - użyjmy ostatniego zapytania
-                    const lastQuery = chainInfo.chain[chainInfo.chain.length - 1];
+                    const lastQuery =
+                        chainInfo.chain[chainInfo.chain.length - 1];
                     const queryType = lastQuery.type;
-                    const query = lastQuery.query.substring(0, 15) + (lastQuery.query.length > 15 ? "..." : "");
-                    this.label = `[${queryType === "text" ? "T" : "R"}] "${query}"`;
+                    const query =
+                        lastQuery.query.substring(0, 15) +
+                        (lastQuery.query.length > 15 ? "..." : "");
+                    this.label = `[${
+                        queryType === "text" ? "T" : "R"
+                    }] "${query}"`;
                     this.description = `Line ${bookmark.lineNumber + 1}`;
                 } else {
                     // Jeśli nie mamy informacji, wyświetlamy podstawową etykietę
@@ -94,10 +127,6 @@ export class BookmarkNode extends vscode.TreeItem {
             };
             this.contextValue = "chainGrep.bookmark";
         } else {
-            // Domyślna ikona zakładki
-            this.iconPath = new vscode.ThemeIcon("bookmark");
-            this.description = this.getBookmarkDescription(bookmark);
-
             // Sprawdzamy, czy to zakładka w uproszczonej strukturze
             if (this.parent && this.parent.type === BookmarkNodeType.FileRoot) {
                 // Zakładka jest bezpośrednim dzieckiem węzła pliku (FileRoot) - uproszczona struktura
@@ -105,16 +134,19 @@ export class BookmarkNode extends vscode.TreeItem {
                     this.label = bookmark.label;
                 } else if (bookmark.lineText) {
                     this.label =
-                        bookmark.lineText.length > 40 ? bookmark.lineText.substring(0, 40) + "..." : bookmark.lineText;
+                        bookmark.lineText.length > 40
+                            ? bookmark.lineText.substring(0, 40) + "..."
+                            : bookmark.lineText;
                 } else {
                     this.label = "Line " + (bookmark.lineNumber + 1);
                 }
                 this.iconPath = new vscode.ThemeIcon("bookmark");
-            }
-            // Standardowa struktura z kategoriami - zakładka jako odnośnik do pliku źródłowego
-            else if (this.parent && this.parent.type === BookmarkNodeType.Category && !bookmark.docUri) {
+            } else if (!bookmark.docUri) {
+                // Standardowa struktura z kategoriami - zakładka jako odnośnik do pliku źródłowego
                 this.label = "Source File";
                 this.iconPath = new vscode.ThemeIcon("file-code");
+                this.description = `Line ${bookmark.lineNumber + 1}`;
+                this.contextValue = "chainGrep.sourceFileRef";
             }
 
             this.command = {
@@ -145,7 +177,9 @@ export class BookmarkNode extends vscode.TreeItem {
 
                 try {
                     // Próbujemy pobrać nazwę pliku z uri źródłowego
-                    const fileName = path.basename(vscode.Uri.parse(this.bookmark.sourceUri).fsPath);
+                    const fileName = path.basename(
+                        vscode.Uri.parse(this.bookmark.sourceUri).fsPath
+                    );
                     this.label = fileName;
                 } catch (e) {
                     // Jeśli się nie uda, używamy tego co już jest ustawione
@@ -171,7 +205,9 @@ export class BookmarkNode extends vscode.TreeItem {
     private getBookmarkTooltip(bookmark: Bookmark): string {
         let sourcePath = "";
         try {
-            sourcePath = bookmark.sourceUri ? vscode.Uri.parse(bookmark.sourceUri).fsPath : "";
+            sourcePath = bookmark.sourceUri
+                ? vscode.Uri.parse(bookmark.sourceUri).fsPath
+                : "";
             sourcePath = path.basename(sourcePath);
         } catch {
             sourcePath = bookmark.sourceUri;
@@ -214,8 +250,25 @@ export class BookmarkNode extends vscode.TreeItem {
 
         // Dla zwykłych zakładek (liści w drzewie)
         if (this.type === BookmarkNodeType.Bookmark) {
-            // Wyświetlamy tylko numer linii dla wszystkich typów zakładek
-            return `Line ${bookmark.lineNumber + 1}`;
+            // Dla zakładek w uproszczonej strukturze (bezpośrednich dzieci FileRoot) wyświetlamy treść linii
+            if (!bookmark.docUri || bookmark.docUri === "") {
+                // Jeśli to odnośnik do pliku źródłowego w kategorii, zawsze wyświetlamy "Source File"
+                if (!bookmark.docUri) {
+                    return "Source File";
+                }
+
+                if (bookmark.label) {
+                    return bookmark.label;
+                } else if (bookmark.lineText) {
+                    return bookmark.lineText.length > 40
+                        ? bookmark.lineText.substring(0, 40) + "..."
+                        : bookmark.lineText;
+                } else {
+                    return "Line " + (bookmark.lineNumber + 1);
+                }
+            }
+            // Dla innych węzłów Bookmark (jak Chain Grep) etykiety są ustawiane później w setupBookmarkNode
+            return "";
         }
         // Dla węzłów kategorii zakładek
         else if (this.type === BookmarkNodeType.Category) {
@@ -247,14 +300,23 @@ function getBookmarkLabel(bookmark: Bookmark, type: BookmarkNodeType): string {
         }
 
         // Truncate long line text for better display
-        return bookmark.lineText.length > 60 ? bookmark.lineText.substring(0, 57) + "..." : bookmark.lineText;
+        return bookmark.lineText.length > 60
+            ? bookmark.lineText.substring(0, 57) + "..."
+            : bookmark.lineText;
     } else if (type === BookmarkNodeType.Bookmark) {
         // Dla zakładek w uproszczonej strukturze (bezpośrednich dzieci FileRoot) wyświetlamy treść linii
         if (!bookmark.docUri || bookmark.docUri === "") {
+            // Jeśli to odnośnik do pliku źródłowego w kategorii, zawsze wyświetlamy "Source File"
+            if (!bookmark.docUri) {
+                return "Source File";
+            }
+
             if (bookmark.label) {
                 return bookmark.label;
             } else if (bookmark.lineText) {
-                return bookmark.lineText.length > 40 ? bookmark.lineText.substring(0, 40) + "..." : bookmark.lineText;
+                return bookmark.lineText.length > 40
+                    ? bookmark.lineText.substring(0, 40) + "..."
+                    : bookmark.lineText;
             } else {
                 return "Line " + (bookmark.lineNumber + 1);
             }

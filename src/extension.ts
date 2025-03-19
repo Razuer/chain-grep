@@ -112,6 +112,7 @@ export async function activate(context: vscode.ExtensionContext) {
         }
     );
 
+    bookmarkProvider.setTreeView(bookmarkTreeView);
     bookmarkProvider.setChainGrepTree(chainGrepProvider, chainTreeView);
 
     chainTreeView.onDidChangeVisibility((e) => {
@@ -516,13 +517,12 @@ export async function activate(context: vscode.ExtensionContext) {
 
                 const docUri = editor.document.uri.toString();
                 if (docUri.startsWith("chaingrep:")) {
+                    vscode.commands.executeCommand(
+                        "workbench.view.extension.chainGrepViewContainer"
+                    );
                     revealChainNode(docUri);
-                } else {
-                    const rootNode =
-                        chainGrepProvider.findRootNodeBySourceUri(docUri);
-                    if (rootNode) {
-                        revealChainNode(docUri);
-                    }
+                } else if (chainTreeView?.visible) {
+                    revealChainNode(docUri);
                 }
 
                 vscode.commands.executeCommand(
@@ -1059,38 +1059,30 @@ async function executeChainSearchAndUpdateEditor(
 }
 
 function revealChainNode(docUri: string) {
-    vscode.commands.executeCommand(
-        "workbench.view.extension.chainGrepViewContainer"
-    );
+    // Sprawdź tylko czy widok Chain Grep jest widoczny
+    if (!chainTreeView?.visible) {
+        return;
+    }
+
+    // Najpierw znajdź odpowiedni węzeł
+    let nodeToReveal: ChainGrepNode | undefined;
 
     if (docUri.startsWith("chaingrep:")) {
-        const node = chainGrepProvider.docUriToNode.get(docUri);
-        if (node && chainTreeView) {
-            try {
-                chainTreeView.reveal(node, {
-                    select: true,
-                    focus: false,
-                    expand: true,
-                });
-            } catch (error) {
-                console.error(`Chain Grep: Error revealing chain node:`, error);
-            }
-        }
+        nodeToReveal = chainGrepProvider.docUriToNode.get(docUri);
     } else {
-        const rootNode = chainGrepProvider.findRootNodeBySourceUri(docUri);
-        if (rootNode && chainTreeView) {
-            try {
-                chainTreeView.reveal(rootNode, {
-                    select: true,
-                    focus: false,
-                    expand: true,
-                });
-            } catch (error) {
-                console.error(
-                    `Chain Grep: Error revealing source node:`,
-                    error
-                );
-            }
+        nodeToReveal = chainGrepProvider.findRootNodeBySourceUri(docUri);
+    }
+
+    if (nodeToReveal && chainTreeView) {
+        try {
+            // Używamy standardowego reveal bez czyszczenia poprzedniego zaznaczenia
+            chainTreeView.reveal(nodeToReveal, {
+                select: true,
+                focus: false,
+                expand: true,
+            });
+        } catch (error) {
+            console.error(`Chain Grep: Error revealing node:`, error);
         }
     }
 }
