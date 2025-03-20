@@ -228,7 +228,7 @@ export class BookmarkNode extends vscode.TreeItem {
             lines.push(`Created: ${date.toLocaleString()}`);
         }
 
-        // Add occurrence index if available
+        // Dodaj informację o indeksie wystąpienia, jeśli istnieje
         if (bookmark.context?.occurrenceIndex !== undefined) {
             lines.push(`Occurrence: ${bookmark.context.occurrenceIndex + 1}`);
         }
