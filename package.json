@@ -103,10 +103,6 @@
                 "title": "Open Bookmark"
             },
             {
-                "command": "chainGrep.openCurrentLineBookmark",
-                "title": "Chain Grep: Open Linked Bookmark"
-            },
-            {
                 "command": "_chainGrep.removeBookmark",
                 "title": "Remove Bookmark",
                 "icon": "$(remove)"
@@ -120,6 +116,16 @@
                 "command": "chainGrep.clearCurrentDocBookmarks",
                 "title": "Chain Grep: Clear Document Bookmarks",
                 "icon": "$(close)"
+            },
+            {
+                "command": "_chainGrep.removeFileBookmarks",
+                "title": "Remove All Bookmarks in File",
+                "icon": "$(trash)"
+            },
+            {
+                "command": "_chainGrep.removeCategoryBookmarks",
+                "title": "Remove This Bookmark and Related",
+                "icon": "$(trash)"
             }
         ],
         "keybindings": [
@@ -254,17 +260,22 @@
                     "command": "_chainGrep.removeBookmark",
                     "when": "viewItem == chainGrep.bookmark",
                     "group": "inline"
+                },
+                {
+                    "command": "_chainGrep.removeFileBookmarks",
+                    "when": "view == chainGrepBookmarks && viewItem == fileRoot",
+                    "group": "inline"
+                },
+                {
+                    "command": "_chainGrep.removeCategoryBookmarks",
+                    "when": "view == chainGrepBookmarks && viewItem == category",
+                    "group": "inline"
                 }
             ],
             "editor/context": [
                 {
                     "submenu": "chainGrep.contextSubmenu",
                     "group": "chain-grep@1"
-                },
-                {
-                    "command": "chainGrep.openCurrentLineBookmark",
-                    "when": "editorHasBookmark",
-                    "group": "chain-grep@2"
                 }
             ],
             "chainGrep.contextSubmenu": [

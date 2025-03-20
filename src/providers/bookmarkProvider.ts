@@ -6,9 +6,12 @@ import { getBookmarkColor } from "../services/configService";
 import { getChainGrepMap } from "../services/stateService";
 import { ChainGrepDataProvider } from "./chainGrepDataProvider";
 
-/**
- * Provider for bookmark view
- */
+interface BookmarkCache {
+    fileLineCache: Map<string, Map<number, string[]>>;
+    contentHashCache: Map<string, string>;
+    documentTimestamps: Map<string, number>;
+}
+
 export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
     private _onDidChangeTreeData: vscode.EventEmitter<BookmarkNode | undefined | void> = new vscode.EventEmitter();
     readonly onDidChangeTreeData: vscode.Event<BookmarkNode | undefined | void> = this._onDidChangeTreeData.event;
@@ -19,12 +22,22 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
     private docLineToBookmarks: Map<string, Map<number, string[]>> = new Map();
     private sourceLineToBookmarks: Map<string, Map<number, string[]>> = new Map();
 
+    private bookmarkCache: BookmarkCache = {
+        fileLineCache: new Map(),
+        contentHashCache: new Map(),
+        documentTimestamps: new Map(),
+    };
+
     private getChainInfo: (docUri: string) => any;
     private bookmarkDecorationType: vscode.TextEditorDecorationType;
 
     private chainGrepProvider: ChainGrepDataProvider | undefined;
     private chainGrepTreeView: vscode.TreeView<any> | undefined;
     private bookmarkTreeView: vscode.TreeView<any> | undefined;
+
+    private lastUpdateTimestamp: number = 0;
+    private updateThrottleTime: number = 100;
+    private pendingRefresh: boolean = false;
 
     constructor() {
         this.getChainInfo = () => undefined;
@@ -66,8 +79,6 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                     });
                 }
             }
-
-            // Nie przełączamy automatycznie widoku - niech użytkownik zrobi to ręcznie jeśli chce
         } catch (error) {
             console.error(`Error revealing node in Chain Grep tree: ${error}`);
         }
@@ -125,14 +136,12 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
         }
 
         if (!element) {
-            // Główny poziom - grupujemy zakładki według pliku źródłowego
             const allBookmarks = Array.from(this.bookmarks.values());
 
             if (allBookmarks.length === 0) {
                 return Promise.resolve([]);
             }
 
-            // Grupujemy zakładki według pliku źródłowego
             const fileToBookmarksMap = new Map<string, Bookmark[]>();
 
             for (const bookmark of allBookmarks) {
@@ -142,32 +151,26 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                 fileToBookmarksMap.get(bookmark.sourceUri)!.push(bookmark);
             }
 
-            // Tworzymy węzły dla każdego pliku źródłowego
             const fileNodes: BookmarkNode[] = [];
 
             for (const [sourceUri, bookmarksInFile] of fileToBookmarksMap.entries()) {
-                // Filtrujemy tylko zakładki źródłowe (te które są w pliku źródłowym)
                 const sourceBookmarks = bookmarksInFile.filter((b) => b.docUri === "");
 
                 if (sourceBookmarks.length === 0) {
                     continue;
                 }
 
-                // Sprawdzamy, czy plik ma powiązane dokumenty Chain Grep
                 const chainGrepBookmarks = bookmarksInFile.filter((b) => b.docUri !== "");
                 const hasChainGrepBookmarks = chainGrepBookmarks.length > 0;
 
                 if (!hasChainGrepBookmarks) {
-                    // Uproszczona struktura dla plików bez dokumentów Chain Grep
                     try {
                         const fileUri = vscode.Uri.parse(sourceUri);
                         const fileName = path.basename(fileUri.fsPath);
 
-                        // Tworzymy bezpośrednio węzły zakładek jako dzieci głównego węzła pliku
                         const bookmarkNodes: BookmarkNode[] = [];
 
                         for (const bookmark of sourceBookmarks) {
-                            // Używamy treści linii lub etykiety jako label i numeru linii jako description
                             const bookmarkNode = new BookmarkNode(
                                 bookmark,
                                 vscode.TreeItemCollapsibleState.None,
@@ -177,16 +180,12 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                             bookmarkNodes.push(bookmarkNode);
                         }
 
-                        // Sortujemy zakładki według numeru linii
                         bookmarkNodes.sort((a, b) => a.bookmark.lineNumber - b.bookmark.lineNumber);
 
-                        // Tworzymy główny węzeł pliku (wykorzystując FileRoot zamiast Category)
                         if (bookmarkNodes.length > 0) {
-                            // Używamy pierwszej zakładki jako reprezentacji pliku
                             const fileBookmark = {
                                 ...bookmarkNodes[0].bookmark,
                                 lineText: fileName,
-                                // Usuwamy label, żeby móc ustawić nazwę pliku
                                 label: undefined,
                             };
 
@@ -203,11 +202,8 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                         console.error("Error creating file node:", e);
                     }
                 } else {
-                    // Standardowa struktura dla plików z dokumentami Chain Grep
-                    // Grupujemy zakładki według ich etykiet (label) lub treści linii
                     const bookmarksByLabel = new Map<string, Bookmark[]>();
 
-                    // Najpierw dodajemy wszystkie zakładki źródłowe
                     for (const bookmark of sourceBookmarks) {
                         const key = bookmark.label || bookmark.lineText;
                         if (!bookmarksByLabel.has(key)) {
@@ -216,7 +212,6 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                         bookmarksByLabel.get(key)!.push(bookmark);
                     }
 
-                    // Następnie dodajemy zakładki Chain Grep do odpowiednich kategorii
                     for (const bookmark of bookmarksInFile) {
                         if (bookmark.docUri && bookmark.linkedBookmarkId) {
                             const sourceBookmark = this.bookmarks.get(bookmark.linkedBookmarkId);
@@ -229,23 +224,18 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                         }
                     }
 
-                    // Tworzymy węzły zakładek dla każdej kategorii
                     const categoryNodes: BookmarkNode[] = [];
 
                     for (const [label, bookmarksForCategory] of bookmarksByLabel.entries()) {
-                        // Filtrujemy najpierw zakładki źródłowe dla tej kategorii
                         const sourceBookmarksForCategory = bookmarksForCategory.filter((b) => b.docUri === "");
                         if (sourceBookmarksForCategory.length === 0) {
                             continue;
                         }
 
-                        // Bierzemy pierwszą zakładkę źródłową jako reprezentanta kategorii
                         const mainBookmark = sourceBookmarksForCategory[0];
 
-                        // Tworzymy listę lokalizacji (plik źródłowy + Chain Grep)
                         const locationNodes: BookmarkNode[] = [];
 
-                        // Dodajemy odnośnik do pliku źródłowego z pełną nazwą pliku
                         for (const sourceBookmark of sourceBookmarksForCategory) {
                             const sourceFileNode = new BookmarkNode(
                                 { ...sourceBookmark },
@@ -253,13 +243,11 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                                 BookmarkNodeType.Bookmark
                             );
 
-                            // Oznaczamy jako odnośnik do pliku źródłowego
                             sourceFileNode.sourceFileReference = true;
 
                             locationNodes.push(sourceFileNode);
                         }
 
-                        // Dodajemy odnośniki do dokumentów Chain Grep
                         const chainBookmarks = bookmarksForCategory.filter((b) => b.docUri !== "");
                         for (const chainBookmark of chainBookmarks) {
                             const chainNode = new BookmarkNode(
@@ -271,7 +259,6 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                             locationNodes.push(chainNode);
                         }
 
-                        // Sortujemy węzły - najpierw plik źródłowy, potem Chain Grep
                         locationNodes.sort((a, b) => {
                             if (a.sourceFileReference === true && b.sourceFileReference !== true) {
                                 return -1;
@@ -282,7 +269,6 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                             return 0;
                         });
 
-                        // Tworzymy węzeł kategorii (zakładki) z jej lokalizacjami jako dziećmi
                         if (locationNodes.length > 0) {
                             const categoryNode = new BookmarkNode(
                                 mainBookmark,
@@ -295,20 +281,16 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                         }
                     }
 
-                    // Sortujemy kategorie według numeru linii
                     categoryNodes.sort((a, b) => a.bookmark.lineNumber - b.bookmark.lineNumber);
 
-                    // Tworzymy węzeł pliku z kategoriami zakładek jako dziećmi
                     if (categoryNodes.length > 0) {
                         try {
                             const fileUri = vscode.Uri.parse(sourceUri);
                             const fileName = path.basename(fileUri.fsPath);
 
-                            // Używamy pierwszej zakładki jako reprezentacji pliku
                             const fileBookmark = {
                                 ...categoryNodes[0].bookmark,
                                 lineText: fileName,
-                                // Usuwamy label, bo liczba zakładek będzie w description
                                 label: undefined,
                             };
 
@@ -327,7 +309,6 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                 }
             }
 
-            // Sortujemy pliki według nazwy
             fileNodes.sort((a, b) => {
                 try {
                     const aFileName = path.basename(vscode.Uri.parse(a.bookmark.sourceUri).fsPath);
@@ -369,7 +350,9 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
             bookmarkIds.push(bookmark.id);
         }
 
-        this.refresh();
+        this.addToCache(bookmark);
+
+        this.throttledRefresh();
         this.reapplyAllBookmarkDecorations();
     }
 
@@ -377,6 +360,7 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
         const bookmark = this.bookmarks.get(bookmarkId);
         if (bookmark) {
             this.removeFromIndices(bookmark);
+            this.removeFromCache(bookmark);
 
             if (bookmark.linkedBookmarkId) {
                 const linkedBookmark = this.bookmarks.get(bookmark.linkedBookmarkId);
@@ -398,7 +382,7 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                 }
             }
 
-            this.refresh();
+            this.throttledRefresh();
             this.applyBookmarkDecorations();
         }
     }
@@ -482,6 +466,8 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
         this.docLineToBookmarks.clear();
         this.sourceLineToBookmarks.clear();
 
+        this.clearCache();
+
         this.refresh();
         this.reapplyAllBookmarkDecorations();
     }
@@ -495,10 +481,12 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
         this.sourceUriToBookmarks.clear();
         this.docLineToBookmarks.clear();
         this.sourceLineToBookmarks.clear();
+        this.clearCache();
 
         for (const bookmark of bookmarks) {
             this.bookmarks.set(bookmark.id, bookmark);
             this.addToIndices(bookmark);
+            this.addToCache(bookmark);
 
             if (!this.sourceUriToBookmarks.has(bookmark.sourceUri)) {
                 this.sourceUriToBookmarks.set(bookmark.sourceUri, []);
@@ -629,28 +617,18 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
     private updateEditorHasBookmarkContext(editor: vscode.TextEditor, bookmarks: Bookmark[]): void {
         const lineNumber = editor.selection.active.line;
         const docUri = editor.document.uri.toString();
+        const isChainGrepDoc = docUri.startsWith("chaingrep:");
 
-        if (docUri.startsWith("chaingrep:")) {
-            const hasBookmark = this.hasBookmarkAtLine(docUri, lineNumber);
-            vscode.commands.executeCommand("setContext", "editorHasBookmark", hasBookmark);
-            return;
+        let hasBookmark = isChainGrepDoc
+            ? this.hasBookmarkAtLine(docUri, lineNumber)
+            : this.hasSourceBookmarkAtLine(docUri, lineNumber);
+
+        if (!hasBookmark && !isChainGrepDoc) {
+            const sourceBookmarks = this.getSourceBookmarksAtLine(docUri, lineNumber);
+            hasBookmark = sourceBookmarks.some((b) => b.linkedBookmarkId !== undefined);
         }
 
-        const hasDirectBookmark = this.hasSourceBookmarkAtLine(docUri, lineNumber);
-        if (hasDirectBookmark) {
-            vscode.commands.executeCommand("setContext", "editorHasBookmark", true);
-            return;
-        }
-
-        const sourceBookmarks = this.getSourceBookmarksAtLine(docUri, lineNumber);
-        for (const sourceBookmark of sourceBookmarks) {
-            if (sourceBookmark.linkedBookmarkId && this.bookmarks.has(sourceBookmark.linkedBookmarkId)) {
-                vscode.commands.executeCommand("setContext", "editorHasBookmark", true);
-                return;
-            }
-        }
-
-        vscode.commands.executeCommand("setContext", "editorHasBookmark", false);
+        vscode.commands.executeCommand("setContext", "editorHasBookmark", hasBookmark);
     }
 
     private getBookmarkHoverMessage(bookmark: Bookmark): vscode.MarkdownString {
@@ -676,7 +654,6 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
             hoverMessage.appendMarkdown(`\n\nCreated: ${date.toLocaleString()}`);
         }
 
-        // Wyświetl informację o indeksie wystąpienia (Occurrence) dla identyfikacji duplikatów
         if (bookmark.context?.occurrenceIndex !== undefined) {
             hoverMessage.appendMarkdown(`\n\nOccurrence: ${bookmark.context.occurrenceIndex + 1}`);
         }
@@ -810,6 +787,15 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
 
         const sourceUri = chainInfo.sourceUri.toString();
 
+        const currentTimestamp = document.version;
+        const cachedTimestamp = this.bookmarkCache.documentTimestamps.get(docUri);
+
+        if (cachedTimestamp && cachedTimestamp === currentTimestamp) {
+            return;
+        }
+
+        this.bookmarkCache.documentTimestamps.set(docUri, currentTimestamp);
+
         const bookmarksToSync = Array.from(this.bookmarks.values()).filter(
             (b) => b.docUri === docUri || (b.sourceUri === sourceUri && b.docUri === "")
         );
@@ -826,8 +812,12 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                     if (bookmark.lineNumber < document.lineCount) {
                         const newText = document.lineAt(bookmark.lineNumber).text.trim();
 
-                        if (bookmark.lineText !== newText) {
+                        const newContentHash = this.calculateLineHash(newText);
+                        const oldContentHash = this.bookmarkCache.contentHashCache.get(bookmark.id);
+
+                        if (!oldContentHash || oldContentHash !== newContentHash) {
                             bookmark.lineText = newText;
+                            this.bookmarkCache.contentHashCache.set(bookmark.id, newContentHash);
 
                             if (bookmark.context) {
                                 const newContext = this.getLineContext(document, bookmark.lineNumber);
@@ -840,33 +830,7 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                             if (bookmark.linkedBookmarkId) {
                                 const linkedBookmark = this.bookmarks.get(bookmark.linkedBookmarkId);
                                 if (linkedBookmark) {
-                                    const linkedDocUri = linkedBookmark.docUri || linkedBookmark.sourceUri;
-                                    try {
-                                        const linkedDoc = await vscode.workspace.openTextDocument(
-                                            vscode.Uri.parse(linkedDocUri)
-                                        );
-
-                                        const matchingLineNumber = await this.findBestMatchingLine(
-                                            bookmark,
-                                            linkedDocUri
-                                        );
-
-                                        if (
-                                            matchingLineNumber !== undefined &&
-                                            matchingLineNumber !== linkedBookmark.lineNumber
-                                        ) {
-                                            linkedBookmark.lineNumber = matchingLineNumber;
-                                            linkedBookmark.lineText = linkedDoc.lineAt(matchingLineNumber).text.trim();
-
-                                            if (linkedBookmark.context) {
-                                                const newContext = this.getLineContext(linkedDoc, matchingLineNumber);
-                                                linkedBookmark.context.beforeLines = newContext.beforeLines;
-                                                linkedBookmark.context.afterLines = newContext.afterLines;
-                                            }
-                                        }
-                                    } catch (error) {
-                                        console.error("Error updating linked bookmark:", error);
-                                    }
+                                    await this.updateLinkedBookmark(bookmark, linkedBookmark);
                                 }
                             }
                         }
@@ -876,13 +840,54 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                     }
                 }
             } catch (error) {
-                console.error("Error synchronizing bookmark:", error);
+                console.error("Chain Grep: Error synchronizing bookmark:", error);
             }
         }
 
         if (changed) {
-            this.refresh();
+            this.throttledRefresh();
             this.applyBookmarkDecorations();
+        }
+    }
+
+    private async updateLinkedBookmark(sourceBookmark: Bookmark, linkedBookmark: Bookmark): Promise<void> {
+        const linkedDocUri = linkedBookmark.docUri || linkedBookmark.sourceUri;
+        try {
+            const linkedDoc = await vscode.workspace.openTextDocument(vscode.Uri.parse(linkedDocUri));
+
+            const cacheKey = `${linkedDocUri}:${linkedBookmark.lineNumber}:${sourceBookmark.lineText}`;
+            let matchingLineNumber: number | undefined;
+
+            if (this.isCachedPositionValid(linkedBookmark)) {
+                matchingLineNumber = linkedBookmark.lineNumber;
+            } else {
+                matchingLineNumber = await this.findBestMatchingLine(sourceBookmark, linkedDocUri);
+            }
+
+            if (
+                matchingLineNumber !== undefined &&
+                matchingLineNumber !== linkedBookmark.lineNumber &&
+                matchingLineNumber >= 0 &&
+                matchingLineNumber < linkedDoc.lineCount
+            ) {
+                linkedBookmark.lineNumber = matchingLineNumber;
+                linkedBookmark.lineText = linkedDoc.lineAt(matchingLineNumber).text.trim();
+
+                this.bookmarkCache.contentHashCache.set(
+                    linkedBookmark.id,
+                    this.calculateLineHash(linkedBookmark.lineText)
+                );
+
+                this.updateFileLinkCache(linkedBookmark);
+
+                if (linkedBookmark.context) {
+                    const newContext = this.getLineContext(linkedDoc, matchingLineNumber);
+                    linkedBookmark.context.beforeLines = newContext.beforeLines;
+                    linkedBookmark.context.afterLines = newContext.afterLines;
+                }
+            }
+        } catch (error) {
+            console.error("Chain Grep: Error updating linked bookmark:", error);
         }
     }
 
@@ -928,38 +933,31 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
         }
 
         try {
-            // Logika otwierania zakładki zależna od typu
             if (bookmark.docUri && bookmark.docUri.startsWith("chaingrep:")) {
-                // Zakładka w dokumencie Chain Grep
                 const chainGrepUri = vscode.Uri.parse(bookmark.docUri);
                 const doc = await vscode.workspace.openTextDocument(chainGrepUri);
                 const editor = await vscode.window.showTextDocument(doc, {
                     preview: false,
                 });
 
-                // Przejdź do linii zakładki
                 const position = new vscode.Position(bookmark.lineNumber, 0);
                 editor.selection = new vscode.Selection(position, position);
                 editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
 
-                // Ujawnij węzeł w drzewie Chain Grep, ale tylko gdy aktywna jest zakładka Chain Grep
                 if (this.chainGrepTreeView?.visible) {
                     this.revealNodeInTree(bookmark.docUri);
                 }
             } else {
-                // Zakładka w pliku źródłowym lub zakładka w pliku źródłowym połączona z zakładką Chain Grep
                 const sourceUri = vscode.Uri.parse(bookmark.sourceUri);
                 const doc = await vscode.workspace.openTextDocument(sourceUri);
                 const editor = await vscode.window.showTextDocument(doc, {
                     preview: false,
                 });
 
-                // Przejdź do linii zakładki
                 const position = new vscode.Position(bookmark.lineNumber, 0);
                 editor.selection = new vscode.Selection(position, position);
                 editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
 
-                // Ujawnij węzeł w drzewie Chain Grep, ale tylko gdy aktywna jest zakładka Chain Grep
                 if (this.chainGrepTreeView?.visible) {
                     this.revealNodeInTree(bookmark.sourceUri);
                 }
@@ -1025,24 +1023,27 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
 
         let similarity = 0;
 
-        // Sprawdzamy zgodność indeksu wystąpienia - jeśli indeksy są identyczne, to znacząco zwiększamy podobieństwo
         if (
             sourceContext.occurrenceIndex !== undefined &&
             sourceContext.occurrenceIndex === targetContext.occurrenceIndex
         ) {
-            similarity += 2.0; // Duży bonus za zgodność indeksu wystąpienia
+            similarity += 2.0;
         }
 
         const beforeSimilarity = this.calculateLinesSimilarity(sourceContext.beforeLines, targetContext.beforeLines);
         const afterSimilarity = this.calculateLinesSimilarity(sourceContext.afterLines, targetContext.afterLines);
 
-        // W kontekście większą wagę dajemy podobieństwu linii po zakładce
         similarity += (beforeSimilarity + afterSimilarity * 1.5) / 2.5;
 
         return similarity;
     }
 
     public async findBestMatchingLine(bookmark: Bookmark, targetDocUri: string): Promise<number | undefined> {
+        const cachedLine = this.getCachedLineForBookmark(bookmark, targetDocUri);
+        if (cachedLine !== undefined) {
+            return cachedLine;
+        }
+
         try {
             const doc = await vscode.workspace.openTextDocument(vscode.Uri.parse(targetDocUri));
 
@@ -1055,46 +1056,38 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                 score: number;
             }
 
-            // Cache linii i ich indeksów wystąpień dla optymalizacji
             const lineOccurrenceCache = new Map<number, number>();
 
-            // Najpierw szukamy linii z identycznym tekstem
             const matchingLines: {
                 lineNumber: number;
                 occurrenceIndex: number;
             }[] = [];
 
-            // Znajdujemy wszystkie linie z pasującym tekstem
             for (let i = 0; i < doc.lineCount; i++) {
                 const line = doc.lineAt(i).text.trim();
                 if (line === bookmark.lineText) {
-                    // Obliczamy indeks wystąpienia tylko gdy znajdziemy dopasowanie
                     const occurrenceIndex = this.getLineOccurrenceIndex(doc, i, line);
                     lineOccurrenceCache.set(i, occurrenceIndex);
                     matchingLines.push({ lineNumber: i, occurrenceIndex });
                 }
             }
 
-            // Jeśli mamy bookmark z określonym indeksem wystąpienia
             if (bookmark.context?.occurrenceIndex !== undefined && matchingLines.length > 0) {
-                // Najpierw szukamy dokładnego dopasowania indeksu wystąpienia
                 const exactMatch = matchingLines.find((m) => m.occurrenceIndex === bookmark.context!.occurrenceIndex);
 
                 if (exactMatch) {
-                    return exactMatch.lineNumber; // Znaleziono dokładne dopasowanie
+                    return exactMatch.lineNumber;
                 }
 
-                // Jeśli nie ma dokładnego dopasowania, szukamy najbliższego
                 matchingLines.sort((a, b) => {
                     const diffA = Math.abs(a.occurrenceIndex - bookmark.context!.occurrenceIndex!);
                     const diffB = Math.abs(b.occurrenceIndex - bookmark.context!.occurrenceIndex!);
                     return diffA - diffB;
                 });
 
-                return matchingLines[0].lineNumber; // Zwracamy najbliższe dopasowanie
+                return matchingLines[0].lineNumber;
             }
 
-            // Jeśli nie znaleziono po indeksie wystąpienia, używamy bardziej zaawansowanej logiki
             const exactMatches: Match[] = [];
             for (let i = 0; i < doc.lineCount; i++) {
                 const line = doc.lineAt(i).text.trim();
@@ -1102,9 +1095,7 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                     let score = 100;
 
                     if (bookmark.context) {
-                        // Sprawdzamy indeks wystąpienia
                         if (bookmark.context.occurrenceIndex !== undefined) {
-                            // Pobieramy z cache lub obliczamy indeks wystąpienia
                             let currentOccurrenceIndex: number;
                             if (lineOccurrenceCache.has(i)) {
                                 currentOccurrenceIndex = lineOccurrenceCache.get(i)!;
@@ -1113,22 +1104,18 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                                 lineOccurrenceCache.set(i, currentOccurrenceIndex);
                             }
 
-                            // Duży bonus za dokładne dopasowanie indeksu wystąpienia
                             if (bookmark.context.occurrenceIndex === currentOccurrenceIndex) {
                                 score += 150;
                             } else {
-                                // Progresywna kara za różnicę indeksów
                                 const indexDiff = Math.abs(bookmark.context.occurrenceIndex - currentOccurrenceIndex);
                                 score -= indexDiff * 20;
                             }
                         }
 
-                        // Sprawdzamy podobieństwo kontekstu
                         const targetContext = this.getLineContext(doc, i);
                         const contextSimilarity = this.calculateContextSimilarity(bookmark.context, targetContext);
                         score += contextSimilarity * 50;
 
-                        // Sprawdzamy pozycję względną
                         if (bookmark.context.relativePosition !== undefined) {
                             const targetPosition = i / (doc.lineCount || 1);
                             const positionDiff = Math.abs(bookmark.context.relativePosition - targetPosition);
@@ -1141,12 +1128,12 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
             }
 
             if (exactMatches.length > 0) {
-                // Sortujemy po punktacji, od najwyższej
                 exactMatches.sort((a, b) => b.score - a.score);
-                return exactMatches[0].lineNumber;
+                const bestMatch = exactMatches[0].lineNumber;
+                this.cacheMatchingLine(bookmark, targetDocUri, bestMatch);
+                return bestMatch;
             }
 
-            // Jeśli nie znaleziono dokładnych dopasowań, szukamy podobnych linii
             const fuzzyMatches: Match[] = [];
             for (let i = 0; i < doc.lineCount; i++) {
                 const line = doc.lineAt(i).text.trim();
@@ -1174,7 +1161,9 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
 
             if (fuzzyMatches.length > 0) {
                 fuzzyMatches.sort((a, b) => b.score - a.score);
-                return fuzzyMatches[0].lineNumber;
+                const bestMatch = fuzzyMatches[0].lineNumber;
+                this.cacheMatchingLine(bookmark, targetDocUri, bestMatch);
+                return bestMatch;
             }
 
             return undefined;
@@ -1254,30 +1243,34 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
         if (bookmark.docUri === "") {
             return;
         }
-
         try {
             const chain = this.getChainInfo ? this.getChainInfo(bookmark.docUri) : undefined;
             if (!chain) {
                 return;
             }
 
-            // Szukamy istniejącej zakładki źródłowej z tym samym indeksem wystąpienia (occurrenceIndex)
-            const existingSourceBookmark = Array.from(this.bookmarks.values()).find(
+            const existingSourceBookmarks = this.findBookmarks({
+                sourceUri: bookmark.sourceUri,
+                docUri: null,
+                occurrenceIndex: bookmark.context?.occurrenceIndex,
+            });
+
+            const existingSourceBookmark = existingSourceBookmarks.find(
                 (b) =>
-                    b.sourceUri === bookmark.sourceUri &&
-                    b.docUri === "" &&
-                    (b.linkedBookmarkId === bookmark.id ||
-                        (bookmark.linkedBookmarkId && bookmark.linkedBookmarkId === b.id) ||
-                        (b.lineText === bookmark.lineText &&
-                            b.context?.occurrenceIndex === bookmark.context?.occurrenceIndex))
+                    b.linkedBookmarkId === bookmark.id ||
+                    (bookmark.linkedBookmarkId && bookmark.linkedBookmarkId === b.id) ||
+                    b.lineText === bookmark.lineText
             );
 
             if (existingSourceBookmark) {
                 if (existingSourceBookmark.linkedBookmarkId !== bookmark.id) {
                     existingSourceBookmark.linkedBookmarkId = bookmark.id;
+                    this.addBookmark(existingSourceBookmark);
                 }
+
                 if (bookmark.linkedBookmarkId !== existingSourceBookmark.id) {
                     bookmark.linkedBookmarkId = existingSourceBookmark.id;
+                    this.addBookmark(bookmark);
                 }
 
                 this.refresh();
@@ -1286,7 +1279,6 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
             }
 
             const sourceDoc = await vscode.workspace.openTextDocument(vscode.Uri.parse(bookmark.sourceUri));
-
             const matchingLineNumber = await this.findBestMatchingLine(bookmark, bookmark.sourceUri);
 
             if (
@@ -1296,18 +1288,25 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
             ) {
                 const lineText = sourceDoc.lineAt(matchingLineNumber).text.trim();
 
-                // Szukamy istniejącej zakładki w tym samym miejscu i z tym samym indeksem wystąpienia
-                const existingBookmarkAtLine = Array.from(this.bookmarks.values()).find(
-                    (b) =>
-                        b.sourceUri === bookmark.sourceUri &&
-                        b.docUri === "" &&
-                        b.lineNumber === matchingLineNumber &&
-                        b.context?.occurrenceIndex === bookmark.context?.occurrenceIndex
-                );
+                const existingBookmarksAtLine = this.findBookmarks({
+                    sourceUri: bookmark.sourceUri,
+                    docUri: null,
+                    lineNumber: matchingLineNumber,
+                    occurrenceIndex: bookmark.context?.occurrenceIndex,
+                });
 
-                if (existingBookmarkAtLine) {
-                    bookmark.linkedBookmarkId = existingBookmarkAtLine.id;
-                    existingBookmarkAtLine.linkedBookmarkId = bookmark.id;
+                if (existingBookmarksAtLine.length > 0) {
+                    const existingBookmarkAtLine = existingBookmarksAtLine[0];
+
+                    if (existingBookmarkAtLine.linkedBookmarkId !== bookmark.id) {
+                        existingBookmarkAtLine.linkedBookmarkId = bookmark.id;
+                        this.addBookmark(existingBookmarkAtLine);
+                    }
+
+                    if (bookmark.linkedBookmarkId !== existingBookmarkAtLine.id) {
+                        bookmark.linkedBookmarkId = existingBookmarkAtLine.id;
+                        this.addBookmark(bookmark);
+                    }
 
                     this.refresh();
                     this.reapplyAllBookmarkDecorations();
@@ -1337,8 +1336,7 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                 this.addBookmark(sourceBookmark);
 
                 bookmark.linkedBookmarkId = sourceBookmark.id;
-
-                this.bookmarks.set(bookmark.id, bookmark);
+                this.addBookmark(bookmark);
 
                 this.refresh();
                 this.reapplyAllBookmarkDecorations();
@@ -1359,47 +1357,40 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
             }
 
             const chainGrepMap = new Map<string, any>();
-
             const globalChainGrepMap = getChainGrepMap();
 
-            // Collect all Chain Grep documents for this source file
             for (const [docUri, info] of globalChainGrepMap.entries()) {
                 if (info && info.sourceUri && info.sourceUri.toString() === bookmark.sourceUri) {
                     chainGrepMap.set(docUri, info);
                 }
             }
 
-            // If no Chain Grep documents found, we're done
             if (chainGrepMap.size === 0) {
                 return;
             }
 
-            // Process each Chain Grep document
             for (const [chainDocUri, chainInfo] of chainGrepMap.entries()) {
-                // Sprawdź czy istnieje już zakładka w łańcuchu z tym samym wystąpieniem tekstu (occurrenceIndex)
-                const existingBookmark = Array.from(this.bookmarks.values()).find(
-                    (b) =>
-                        (b.linkedBookmarkId === bookmark.id && b.docUri === chainDocUri) ||
-                        (b.docUri === chainDocUri &&
-                            b.sourceUri === bookmark.sourceUri &&
-                            b.lineText === bookmark.lineText &&
-                            b.context?.occurrenceIndex === bookmark.context?.occurrenceIndex)
+                const existingBookmarks = this.findBookmarks({
+                    docUri: chainDocUri,
+                    sourceUri: bookmark.sourceUri,
+                    occurrenceIndex: bookmark.context?.occurrenceIndex,
+                });
+
+                const existingBookmark = existingBookmarks.find(
+                    (b) => b.linkedBookmarkId === bookmark.id || b.lineText === bookmark.lineText
                 );
 
                 if (existingBookmark) {
-                    // Update existing bookmark links
                     if (existingBookmark.linkedBookmarkId !== bookmark.id) {
                         existingBookmark.linkedBookmarkId = bookmark.id;
                         this.bookmarks.set(existingBookmark.id, existingBookmark);
                     }
-                    if (bookmark.linkedBookmarkId !== existingBookmark.id) {
+
+                    if (!bookmark.linkedBookmarkId) {
                         const currentBookmark = this.bookmarks.get(bookmark.id);
                         if (currentBookmark) {
-                            // Don't override existing links - we might have multiple chain docs
-                            if (!currentBookmark.linkedBookmarkId) {
-                                currentBookmark.linkedBookmarkId = existingBookmark.id;
-                                this.bookmarks.set(currentBookmark.id, currentBookmark);
-                            }
+                            currentBookmark.linkedBookmarkId = existingBookmark.id;
+                            this.bookmarks.set(currentBookmark.id, currentBookmark);
                         }
                     }
                     continue;
@@ -1407,7 +1398,6 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
 
                 try {
                     const doc = await vscode.workspace.openTextDocument(vscode.Uri.parse(chainDocUri));
-
                     const matchingLineNumber = await this.findBestMatchingLine(bookmark, chainDocUri);
 
                     if (
@@ -1415,22 +1405,19 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                         matchingLineNumber >= 0 &&
                         matchingLineNumber < doc.lineCount
                     ) {
-                        // Sprawdź zakładkę pod tym samym numerem linii, ale tylko z tym samym indeksem wystąpienia
-                        const bookmarkAtLine = Array.from(this.bookmarks.values()).find(
-                            (b) =>
-                                b.docUri === chainDocUri &&
-                                b.lineNumber === matchingLineNumber &&
-                                b.context?.occurrenceIndex === bookmark.context?.occurrenceIndex
-                        );
+                        const bookmarksAtLine = this.findBookmarks({
+                            docUri: chainDocUri,
+                            lineNumber: matchingLineNumber,
+                            occurrenceIndex: bookmark.context?.occurrenceIndex,
+                        });
 
-                        if (bookmarkAtLine) {
-                            // Link existing bookmark at same line
+                        if (bookmarksAtLine.length > 0) {
+                            const bookmarkAtLine = bookmarksAtLine[0];
                             if (!bookmarkAtLine.linkedBookmarkId) {
                                 bookmarkAtLine.linkedBookmarkId = bookmark.id;
                                 this.bookmarks.set(bookmarkAtLine.id, bookmarkAtLine);
                             }
 
-                            // Link source bookmark to this chain bookmark if not already linked
                             const currentBookmark = this.bookmarks.get(bookmark.id);
                             if (currentBookmark && !currentBookmark.linkedBookmarkId) {
                                 currentBookmark.linkedBookmarkId = bookmarkAtLine.id;
@@ -1439,7 +1426,6 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                             continue;
                         }
 
-                        // Create new bookmark in chain doc
                         const lineText = doc.lineAt(matchingLineNumber).text.trim();
                         const context = this.getLineContext(doc, matchingLineNumber, 5);
                         const relativePosition = matchingLineNumber / (doc.lineCount || 1);
@@ -1463,7 +1449,6 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
 
                         this.addBookmark(chainBookmark);
 
-                        // Only update the source bookmark link if it doesn't have one yet
                         const currentBookmark = this.bookmarks.get(bookmark.id);
                         if (currentBookmark && !currentBookmark.linkedBookmarkId) {
                             currentBookmark.linkedBookmarkId = chainBookmark.id;
@@ -1484,21 +1469,14 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
 
     public updateEditorHasBookmarkContextOnly(editor: vscode.TextEditor): void {
         const docUri = editor.document.uri.toString();
-        let validBookmarks: Bookmark[] = [];
+        const isChainGrepDoc = docUri.startsWith("chaingrep:");
 
-        if (docUri.startsWith("chaingrep:")) {
-            validBookmarks = Array.from(this.bookmarks.values()).filter((b) => b.docUri === docUri);
-        } else {
-            const directBookmarks = Array.from(this.bookmarks.values()).filter(
-                (b) => b.sourceUri === docUri && b.docUri === ""
-            );
-
-            const linkedBookmarks = Array.from(this.bookmarks.values()).filter(
-                (b) => b.sourceUri === docUri && b.docUri !== ""
-            );
-
-            validBookmarks = [...directBookmarks, ...linkedBookmarks];
-        }
+        const validBookmarks = isChainGrepDoc
+            ? this.findBookmarks({ docUri })
+            : [
+                  ...this.findBookmarks({ sourceUri: docUri, docUri: null }),
+                  ...this.findBookmarks({ sourceUri: docUri }),
+              ];
 
         this.updateEditorHasBookmarkContext(editor, validBookmarks);
     }
@@ -1585,25 +1563,18 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
         this.bookmarks.set(bookmark.id, bookmark);
     }
 
-    /**
-     * Zwraca indeks wystąpienia danej linii tekstu w dokumencie.
-     * Zoptymalizowana wersja wykorzystująca szybkie wyszukiwanie całości tekstu dokumentu.
-     */
     private getLineOccurrenceIndex(document: vscode.TextDocument, lineNumber: number, lineText: string): number {
         if (!lineText.trim()) {
-            return 0; // Dla pustych linii zawsze zwracamy 0
+            return 0;
         }
 
         try {
-            // Przygotowanie dokładnego tekstu linii
             const targetLineText = lineText.trim();
 
-            // Pobieramy linie z dokumentu i mapujemy je na tablicę linii
             const lineRange = new vscode.Range(0, 0, lineNumber, 0);
             const textBeforeCurrent = document.getText(lineRange);
             const lines = textBeforeCurrent.split("\n");
 
-            // Zliczamy wystąpienia tej samej linii tekstu
             let occurrenceIndex = 0;
             for (let i = 0; i < lines.length; i++) {
                 if (lines[i].trim() === targetLineText) {
@@ -1616,5 +1587,256 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
             console.error("Error calculating occurrence index:", error);
             return 0;
         }
+    }
+
+    private addToCache(bookmark: Bookmark): void {
+        const uri = bookmark.docUri || bookmark.sourceUri;
+        if (!this.bookmarkCache.fileLineCache.has(uri)) {
+            this.bookmarkCache.fileLineCache.set(uri, new Map());
+        }
+        const lineMap = this.bookmarkCache.fileLineCache.get(uri)!;
+        if (!lineMap.has(bookmark.lineNumber)) {
+            lineMap.set(bookmark.lineNumber, []);
+        }
+        const bookmarksAtLine = lineMap.get(bookmark.lineNumber)!;
+        if (!bookmarksAtLine.includes(bookmark.id)) {
+            bookmarksAtLine.push(bookmark.id);
+        }
+
+        this.bookmarkCache.contentHashCache.set(bookmark.id, this.calculateLineHash(bookmark.lineText));
+    }
+
+    private removeFromCache(bookmark: Bookmark): void {
+        const uri = bookmark.docUri || bookmark.sourceUri;
+        const lineMap = this.bookmarkCache.fileLineCache.get(uri);
+        if (lineMap) {
+            const bookmarksAtLine = lineMap.get(bookmark.lineNumber);
+            if (bookmarksAtLine) {
+                const index = bookmarksAtLine.indexOf(bookmark.id);
+                if (index >= 0) {
+                    bookmarksAtLine.splice(index, 1);
+                }
+                if (bookmarksAtLine.length === 0) {
+                    lineMap.delete(bookmark.lineNumber);
+                }
+            }
+            if (lineMap.size === 0) {
+                this.bookmarkCache.fileLineCache.delete(uri);
+            }
+        }
+
+        this.bookmarkCache.contentHashCache.delete(bookmark.id);
+    }
+
+    private clearCache(): void {
+        this.bookmarkCache.fileLineCache.clear();
+        this.bookmarkCache.contentHashCache.clear();
+        this.bookmarkCache.documentTimestamps.clear();
+    }
+
+    private getCachedLineForBookmark(bookmark: Bookmark, targetDocUri: string): number | undefined {
+        const cacheKey = `${targetDocUri}:${bookmark.lineText}:${bookmark.context?.occurrenceIndex || 0}`;
+        for (const [cachedBookmarkId, cachedHash] of this.bookmarkCache.contentHashCache.entries()) {
+            const cachedBookmark = this.bookmarks.get(cachedBookmarkId);
+            if (
+                cachedBookmark &&
+                cachedBookmark.docUri === targetDocUri &&
+                cachedBookmark.lineText === bookmark.lineText &&
+                cachedBookmark.context?.occurrenceIndex === bookmark.context?.occurrenceIndex
+            ) {
+                return cachedBookmark.lineNumber;
+            }
+        }
+        return undefined;
+    }
+
+    private cacheMatchingLine(bookmark: Bookmark, targetDocUri: string, lineNumber: number): void {
+        const cacheKey = `${targetDocUri}:${bookmark.lineText}:${bookmark.context?.occurrenceIndex || 0}`;
+    }
+
+    private updateFileLinkCache(bookmark: Bookmark): void {
+        const uri = bookmark.docUri || bookmark.sourceUri;
+        const lineMap = this.bookmarkCache.fileLineCache.get(uri);
+
+        if (lineMap) {
+            for (const [line, bookmarks] of lineMap.entries()) {
+                const index = bookmarks.indexOf(bookmark.id);
+                if (index >= 0) {
+                    bookmarks.splice(index, 1);
+                    if (bookmarks.length === 0) {
+                        lineMap.delete(line);
+                    }
+                    break;
+                }
+            }
+        }
+
+        if (!this.bookmarkCache.fileLineCache.has(uri)) {
+            this.bookmarkCache.fileLineCache.set(uri, new Map());
+        }
+        const newLineMap = this.bookmarkCache.fileLineCache.get(uri)!;
+        if (!newLineMap.has(bookmark.lineNumber)) {
+            newLineMap.set(bookmark.lineNumber, []);
+        }
+        newLineMap.get(bookmark.lineNumber)!.push(bookmark.id);
+    }
+
+    private isCachedPositionValid(bookmark: Bookmark): boolean {
+        const cachedHash = this.bookmarkCache.contentHashCache.get(bookmark.id);
+        if (!cachedHash) {
+            return false;
+        }
+
+        const currentHash = this.calculateLineHash(bookmark.lineText);
+        return cachedHash === currentHash;
+    }
+
+    private throttledRefresh(): void {
+        const now = Date.now();
+        if (now - this.lastUpdateTimestamp > this.updateThrottleTime) {
+            this.refresh();
+            this.lastUpdateTimestamp = now;
+            this.pendingRefresh = false;
+        } else if (!this.pendingRefresh) {
+            this.pendingRefresh = true;
+            setTimeout(() => {
+                if (this.pendingRefresh) {
+                    this.refresh();
+                    this.lastUpdateTimestamp = Date.now();
+                    this.pendingRefresh = false;
+                }
+            }, this.updateThrottleTime);
+        }
+    }
+
+    private rebuildCache(): void {
+        this.clearCache();
+
+        for (const bookmark of this.bookmarks.values()) {
+            this.addToCache(bookmark);
+        }
+    }
+
+    public findBookmarks(criteria: {
+        id?: string;
+        sourceUri?: string;
+        docUri?: string | null;
+        lineNumber?: number;
+        linkedBookmarkId?: string;
+        occurrenceIndex?: number;
+        lineText?: string;
+    }): Bookmark[] {
+        let candidates: Bookmark[] = [];
+
+        if (criteria.id) {
+            const bookmark = this.bookmarks.get(criteria.id);
+            return bookmark ? [bookmark] : [];
+        }
+
+        if (criteria.lineNumber !== undefined && (criteria.docUri !== undefined || criteria.sourceUri)) {
+            if (criteria.docUri !== undefined) {
+                const docUri = criteria.docUri === null ? "" : criteria.docUri;
+                const lineMap = docUri
+                    ? this.docLineToBookmarks.get(docUri)
+                    : criteria.sourceUri
+                    ? this.sourceLineToBookmarks.get(criteria.sourceUri)
+                    : undefined;
+
+                if (lineMap) {
+                    const bookmarkIds = lineMap.get(criteria.lineNumber);
+                    if (bookmarkIds && bookmarkIds.length > 0) {
+                        candidates = bookmarkIds.map((id) => this.bookmarks.get(id)).filter((b): b is Bookmark => !!b);
+                    }
+                }
+            } else if (criteria.sourceUri) {
+                const lineMap = this.sourceLineToBookmarks.get(criteria.sourceUri);
+                if (lineMap) {
+                    const bookmarkIds = lineMap.get(criteria.lineNumber);
+                    if (bookmarkIds && bookmarkIds.length > 0) {
+                        candidates = bookmarkIds.map((id) => this.bookmarks.get(id)).filter((b): b is Bookmark => !!b);
+                    }
+                }
+            }
+        } else if (criteria.sourceUri) {
+            const bookmarkIds = this.sourceUriToBookmarks.get(criteria.sourceUri);
+            if (bookmarkIds && bookmarkIds.length > 0) {
+                candidates = bookmarkIds.map((id) => this.bookmarks.get(id)).filter((b): b is Bookmark => !!b);
+            }
+        } else {
+            candidates = Array.from(this.bookmarks.values());
+        }
+
+        return candidates.filter((b) => {
+            if (criteria.docUri !== undefined) {
+                const targetDocUri = criteria.docUri === null ? "" : criteria.docUri;
+                if (b.docUri !== targetDocUri) {
+                    return false;
+                }
+            }
+
+            if (criteria.sourceUri && b.sourceUri !== criteria.sourceUri) {
+                return false;
+            }
+
+            if (criteria.lineNumber !== undefined && b.lineNumber !== criteria.lineNumber) {
+                return false;
+            }
+
+            if (criteria.linkedBookmarkId && b.linkedBookmarkId !== criteria.linkedBookmarkId) {
+                return false;
+            }
+
+            if (
+                criteria.occurrenceIndex !== undefined &&
+                (!b.context || b.context.occurrenceIndex !== criteria.occurrenceIndex)
+            ) {
+                return false;
+            }
+
+            if (criteria.lineText && b.lineText !== criteria.lineText) {
+                return false;
+            }
+
+            return true;
+        });
+    }
+
+    removeBookmarksForSourceFile(sourceUri: string): void {
+        const allBookmarks = Array.from(this.bookmarks.values());
+        const bookmarksToRemove = allBookmarks.filter((b) => b.sourceUri === sourceUri);
+
+        for (const bookmark of bookmarksToRemove) {
+            this.removeBookmark(bookmark.id);
+        }
+
+        this.refresh();
+        this.reapplyAllBookmarkDecorations();
+    }
+
+    removeBookmarkWithRelated(rootBookmarkId: string): void {
+        const rootBookmark = this.bookmarks.get(rootBookmarkId);
+        if (!rootBookmark) {
+            return;
+        }
+
+        const allBookmarks = Array.from(this.bookmarks.values());
+
+        const relatedBookmarks = allBookmarks.filter(
+            (b) =>
+                b.linkedBookmarkId === rootBookmarkId ||
+                (rootBookmark.linkedBookmarkId && b.id === rootBookmark.linkedBookmarkId) ||
+                (b.sourceUri === rootBookmark.sourceUri &&
+                    b.lineText === rootBookmark.lineText &&
+                    b.context?.occurrenceIndex === rootBookmark.context?.occurrenceIndex)
+        );
+
+        for (const bookmark of relatedBookmarks) {
+            this.removeBookmark(bookmark.id);
+        }
+
+        this.removeBookmark(rootBookmarkId);
+
+        this.refresh();
+        this.reapplyAllBookmarkDecorations();
     }
 }
