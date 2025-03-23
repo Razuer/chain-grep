@@ -95,26 +95,12 @@ export function getBookmarkColor(): string {
     return config.get<string>("bookmarks.color") || "#3794FF";
 }
 
-/**
- * Sprawdza czy symbole zakładek (❱, ❰) powinny być wyświetlane
- */
 export function areBookmarkSymbolsEnabled(): boolean {
     return getConfig<boolean>("bookmarks.showSymbols", true);
 }
 
-/**
- * Sprawdza czy etykiety zakładek powinny być wyświetlane
- */
 export function areBookmarkLabelsEnabled(): boolean {
     return getConfig<boolean>("bookmarks.showLabels", true);
-}
-
-/**
- * @deprecated Używaj areBookmarkSymbolsEnabled i areBookmarkLabelsEnabled zamiast tej funkcji
- */
-export function areBookmarkDecorationsEnabled(): boolean {
-    // Dla kompatybilności wstecznej, jeśli obie nowe opcje są włączone, to zwracamy true
-    return areBookmarkSymbolsEnabled() && areBookmarkLabelsEnabled();
 }
 
 export function handleConfigChange(

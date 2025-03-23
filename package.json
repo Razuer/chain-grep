@@ -2,9 +2,9 @@
     "publisher": "rejzerek",
     "name": "chain-grep",
     "displayName": "Chain Grep",
-    "description": "Chain Grep enables chained text, regex searches and text highlighting in VS Code — refine your results step by step and refresh the entire chain when the source updates.",
+    "description": "Chain Grep enables chained text/regex searches, text highlighting and bookmarks in VS Code.",
     "icon": "icons/icon.png",
-    "version": "0.1.4",
+    "version": "0.2.0",
     "engines": {
         "vscode": "^1.85.2"
     },
@@ -120,11 +120,6 @@
             {
                 "command": "_chainGrep.removeFileBookmarks",
                 "title": "Remove All Bookmarks in File",
-                "icon": "$(trash)"
-            },
-            {
-                "command": "_chainGrep.removeCategoryBookmarks",
-                "title": "Remove This Bookmark and Related",
                 "icon": "$(trash)"
             }
         ],
@@ -258,17 +253,12 @@
                 },
                 {
                     "command": "_chainGrep.removeBookmark",
-                    "when": "viewItem == chainGrep.bookmark",
+                    "when": "viewItem == standaloneBookmark || viewItem == bookmarkCategory",
                     "group": "inline"
                 },
                 {
                     "command": "_chainGrep.removeFileBookmarks",
                     "when": "view == chainGrepBookmarks && viewItem == fileRoot",
-                    "group": "inline"
-                },
-                {
-                    "command": "_chainGrep.removeCategoryBookmarks",
-                    "when": "view == chainGrepBookmarks && viewItem == category",
                     "group": "inline"
                 }
             ],

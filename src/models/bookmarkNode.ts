@@ -5,100 +5,94 @@ import { getChainGrepMap } from "../services/stateService";
 import { buildChainPath } from "../utils/utils";
 
 export enum BookmarkNodeType {
-    Category = "category",
-    Bookmark = "bookmark",
     FileRoot = "fileRoot",
+    StandaloneBookmark = "standaloneBookmark",
+    BookmarkCategory = "bookmarkCategory",
+    SourceReference = "sourceReference",
+    ChainGrepLink = "chainGrepLink",
 }
 
 export class BookmarkNode extends vscode.TreeItem {
-    public readonly type: BookmarkNodeType;
     public readonly children?: BookmarkNode[];
-    public sourceFileReference?: boolean;
     public parent?: BookmarkNode;
 
     constructor(
         public readonly bookmark: Bookmark,
         public readonly collapsibleState: vscode.TreeItemCollapsibleState,
-        type: BookmarkNodeType = BookmarkNodeType.Bookmark,
+        public readonly type: BookmarkNodeType,
         children?: BookmarkNode[]
     ) {
-        super(BookmarkNode.getLabel(bookmark, type), collapsibleState);
+        super(BookmarkNode.getNodeLabel(bookmark, type), collapsibleState);
 
-        this.type = type;
         this.children = children;
-        this.sourceFileReference = false;
 
         if (children) {
-            for (const child of children) {
+            children.forEach((child) => {
                 child.parent = this;
-            }
+            });
         }
 
-        this.setupNode();
-        this.contextValue = this.getContextValue();
+        this.setupNodeAppearance();
     }
 
-    private setupNode() {
-        if (this.type === BookmarkNodeType.Bookmark) {
-            this.setupBookmarkNode();
-        } else {
-            this.setupCategoryNode();
+    private setupNodeAppearance() {
+        this.tooltip = this.getTooltip();
+        this.contextValue = this.type;
+
+        switch (this.type) {
+            case BookmarkNodeType.FileRoot:
+                this.setupFileRoot();
+                break;
+            case BookmarkNodeType.StandaloneBookmark:
+                this.setupStandaloneBookmark();
+                break;
+            case BookmarkNodeType.BookmarkCategory:
+                this.setupBookmarkCategory();
+                break;
+            case BookmarkNodeType.SourceReference:
+                this.setupSourceReference();
+                break;
+            case BookmarkNodeType.ChainGrepLink:
+                this.setupChainGrepLink();
+                break;
         }
     }
 
-    private setupBookmarkNode() {
-        const bookmark = this.bookmark;
-        this.tooltip = this.getBookmarkTooltip();
+    private setupFileRoot() {
+        this.iconPath = new vscode.ThemeIcon("file");
 
-        // Source file reference within a category
-        if (
-            this.parent &&
-            this.parent.type === BookmarkNodeType.Category &&
-            !bookmark.docUri
-        ) {
-            this.sourceFileReference = true;
-            this.label = "Source File";
-            this.iconPath = new vscode.ThemeIcon("file-code");
-            this.description = `Line ${bookmark.lineNumber + 1}`;
-            this.setOpenCommand();
-            return;
+        if (this.children && this.children.length > 0) {
+            this.description = `${this.children.length} bookmarks`;
         }
+    }
 
-        // Already marked as source file reference
-        if (this.sourceFileReference) {
-            this.iconPath = new vscode.ThemeIcon("file-code");
-            try {
-                const fileName = path.basename(
-                    vscode.Uri.parse(bookmark.sourceUri).fsPath
-                );
-                this.label = fileName;
-                this.description = `Line ${bookmark.lineNumber + 1}`;
-            } catch {
-                this.label = "File";
-                this.description = `Line ${bookmark.lineNumber + 1}`;
-            }
-            this.setOpenCommand();
-            return;
-        }
+    private setupStandaloneBookmark() {
+        this.iconPath = new vscode.ThemeIcon("bookmark");
+        this.description = `Line ${this.bookmark.lineNumber + 1}`;
+        this.command = this.createOpenCommand();
+        this.contextValue = `${this.type}`;
+    }
 
-        // Chain grep document bookmark
-        if (bookmark.docUri && bookmark.docUri.startsWith("chaingrep:")) {
-            this.iconPath = new vscode.ThemeIcon("link");
-            this.setChainGrepLabel();
-            this.setOpenCommand();
-            return;
-        }
-
-        // Regular bookmark
-        const isFileRoot = this.parent?.type === BookmarkNodeType.FileRoot;
-        this.label = this.getFormattedLabel();
+    private setupBookmarkCategory() {
         this.iconPath = new vscode.ThemeIcon("bookmark");
 
-        if (!isFileRoot && !bookmark.docUri) {
-            this.description = `Line ${bookmark.lineNumber + 1}`;
+        if (this.children && this.children.length > 0) {
+            this.description = `${this.children.length} references`;
         }
+        this.contextValue = `${this.type}`;
+    }
 
-        this.setOpenCommand();
+    private setupSourceReference() {
+        this.iconPath = new vscode.ThemeIcon("file-symlink-file");
+        this.label = "Source File";
+        this.description = `Line ${this.bookmark.lineNumber + 1}`;
+        this.command = this.createOpenCommand();
+    }
+
+    private setupChainGrepLink() {
+        this.iconPath = new vscode.ThemeIcon("link");
+        this.setChainGrepLabel();
+        this.command = this.createOpenCommand();
     }
 
     private setChainGrepLabel() {
@@ -106,7 +100,7 @@ export class BookmarkNode extends vscode.TreeItem {
             const chainGrepMap = getChainGrepMap();
             const chainInfo = chainGrepMap.get(this.bookmark.docUri);
 
-            if (chainInfo && chainInfo.chain && chainInfo.chain.length > 0) {
+            if (chainInfo?.chain?.length > 0) {
                 const chainPath = buildChainPath(chainInfo.chain);
                 this.label = chainPath;
             } else {
@@ -119,54 +113,18 @@ export class BookmarkNode extends vscode.TreeItem {
         }
     }
 
-    private setOpenCommand() {
-        this.command = {
+    private createOpenCommand(): vscode.Command {
+        return {
             title: "Open Bookmark",
             command: "_chainGrep.openBookmark",
             arguments: [this],
         };
     }
 
-    private setupCategoryNode() {
-        if (this.type === BookmarkNodeType.FileRoot) {
-            this.iconPath = new vscode.ThemeIcon("file-code");
-            this.tooltip = "File with bookmarks";
-
-            if (this.children && this.children.length > 0) {
-                this.description = `${this.children.length} bookmarks`;
-            }
-            return;
-        }
-
-        if (this.type === BookmarkNodeType.Category) {
-            if ((this as any).isFileNode === true) {
-                this.iconPath = new vscode.ThemeIcon("file-code");
-                this.tooltip = "File with bookmarks";
-
-                try {
-                    const fileName = path.basename(
-                        vscode.Uri.parse(this.bookmark.sourceUri).fsPath
-                    );
-                    this.label = fileName;
-                } catch (e) {}
-
-                if (this.children && this.children.length > 0) {
-                    this.description = `${this.children.length} bookmarks`;
-                }
-            } else {
-                this.iconPath = new vscode.ThemeIcon("bookmark");
-                this.tooltip = "Bookmark with linked references";
-
-                if (this.children && this.children.length > 0) {
-                    this.description = `${this.children.length} references`;
-                }
-            }
-        }
-    }
-
-    private getBookmarkTooltip(): string {
+    private getTooltip(): string {
         const bookmark = this.bookmark;
         let sourcePath = "";
+
         try {
             sourcePath = bookmark.sourceUri
                 ? path.basename(vscode.Uri.parse(bookmark.sourceUri).fsPath)
@@ -193,66 +151,48 @@ export class BookmarkNode extends vscode.TreeItem {
         return lines.join("\n");
     }
 
-    private getFormattedLabel(): string {
-        const bookmark = this.bookmark;
+    static getNodeLabel(bookmark: Bookmark, type: BookmarkNodeType): string {
+        switch (type) {
+            case BookmarkNodeType.FileRoot:
+                try {
+                    return path.basename(
+                        vscode.Uri.parse(bookmark.sourceUri).fsPath
+                    );
+                } catch {
+                    return path.basename(bookmark.sourceUri);
+                }
+
+            case BookmarkNodeType.BookmarkCategory:
+                return this.formatBookmarkText(bookmark, 60);
+
+            case BookmarkNodeType.StandaloneBookmark:
+                return this.formatBookmarkText(bookmark, 40);
+
+            case BookmarkNodeType.SourceReference:
+                return "Source File";
+
+            case BookmarkNodeType.ChainGrepLink:
+                return "Chain Grep";
+
+            default:
+                return "";
+        }
+    }
+
+    private static formatBookmarkText(
+        bookmark: Bookmark,
+        maxLength: number
+    ): string {
         if (bookmark.label) {
             return bookmark.label;
         }
 
         if (bookmark.lineText) {
-            return bookmark.lineText.length > 40
-                ? bookmark.lineText.substring(0, 40) + "..."
+            return bookmark.lineText.length > maxLength
+                ? bookmark.lineText.substring(0, maxLength - 3) + "..."
                 : bookmark.lineText;
         }
 
-        return "Line " + (bookmark.lineNumber + 1);
-    }
-
-    private getContextValue(): string {
-        return this.type;
-    }
-
-    static getLabel(bookmark: Bookmark, type: BookmarkNodeType): string {
-        if (type === BookmarkNodeType.FileRoot) {
-            try {
-                return path.basename(
-                    vscode.Uri.parse(bookmark.sourceUri).fsPath
-                );
-            } catch {
-                return path.basename(bookmark.sourceUri);
-            }
-        }
-
-        if (type === BookmarkNodeType.Category) {
-            if (bookmark.label) {
-                return bookmark.label;
-            }
-
-            return bookmark.lineText.length > 60
-                ? bookmark.lineText.substring(0, 57) + "..."
-                : bookmark.lineText;
-        }
-
-        if (type === BookmarkNodeType.Bookmark) {
-            if (!bookmark.docUri || bookmark.docUri === "") {
-                if (!bookmark.docUri) {
-                    return "Source File";
-                }
-
-                if (bookmark.label) {
-                    return bookmark.label;
-                }
-
-                if (bookmark.lineText) {
-                    return bookmark.lineText.length > 40
-                        ? bookmark.lineText.substring(0, 40) + "..."
-                        : bookmark.lineText;
-                }
-
-                return "Line " + (bookmark.lineNumber + 1);
-            }
-        }
-
-        return "";
+        return `Line ${bookmark.lineNumber + 1}`;
     }
 }
