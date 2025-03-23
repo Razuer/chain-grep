@@ -9,37 +9,37 @@ function getConfig<T>(key: string, defaultValue?: T): T {
 }
 
 export function loadConfiguredPalette(): string {
-    const userPalette = getConfig<string>("colours", "");
+    const userPalette = getConfig<string>("highlights.palette", "");
     return userPalette?.trim() ? userPalette : DEFAULT_COLOURS;
 }
 
 export function areRandomColorsEnabled(): boolean {
-    return getConfig<boolean>("randomColors", false);
+    return getConfig<boolean>("highlights.randomOrder", false);
 }
 
 export function isDetailedChainDocEnabled(): boolean {
-    return getConfig<boolean>("detailedChainDoc", true);
+    return getConfig<boolean>("documents.showDetailedInfo", true);
 }
 
 export function getMaxBaseNameLength(): number {
-    return getConfig<number>("maxBaseNameLength", 70);
+    return getConfig<number>("documents.maxBaseNameLength", 70);
 }
 
 export function getMaxChainDescriptorLength(): number {
-    return getConfig<number>("maxChainDescriptorLength", 30);
+    return getConfig<number>("documents.maxChainDescriptorLength", 30);
 }
 
 export function getCleanupInterval(): number {
-    const minutes = getConfig<number>("cleanupInterval", 5);
+    const minutes = getConfig<number>("system.cleanupInterval", 5);
     return minutes * 60 * 1000;
 }
 
 export function areScrollbarIndicatorsEnabled(): boolean {
-    return getConfig<boolean>("showScrollbarIndicators", true);
+    return getConfig<boolean>("highlights.showScrollbarIndicators", true);
 }
 
 export function isCleanupLoggingEnabled(): boolean {
-    return getConfig<boolean>("cleanupLogging", false);
+    return getConfig<boolean>("system.cleanupLogging", false);
 }
 
 export function isRegexValid(str: string): boolean {
@@ -92,5 +92,130 @@ export function showStatusMessage(
 
 export function getBookmarkColor(): string {
     const config = vscode.workspace.getConfiguration("chainGrep");
-    return config.get<string>("bookmarkColor") || "#3794FF";
+    return config.get<string>("bookmarks.color") || "#3794FF";
+}
+
+/**
+ * Sprawdza czy symbole zakładek (❱, ❰) powinny być wyświetlane
+ */
+export function areBookmarkSymbolsEnabled(): boolean {
+    return getConfig<boolean>("bookmarks.showSymbols", true);
+}
+
+/**
+ * Sprawdza czy etykiety zakładek powinny być wyświetlane
+ */
+export function areBookmarkLabelsEnabled(): boolean {
+    return getConfig<boolean>("bookmarks.showLabels", true);
+}
+
+/**
+ * @deprecated Używaj areBookmarkSymbolsEnabled i areBookmarkLabelsEnabled zamiast tej funkcji
+ */
+export function areBookmarkDecorationsEnabled(): boolean {
+    // Dla kompatybilności wstecznej, jeśli obie nowe opcje są włączone, to zwracamy true
+    return areBookmarkSymbolsEnabled() && areBookmarkLabelsEnabled();
+}
+
+export function handleConfigChange(
+    e: vscode.ConfigurationChangeEvent,
+    params: {
+        cleanupInterval?: NodeJS.Timeout;
+        chainGrepMap: Map<string, any>;
+        bookmarkProvider: any;
+        cleanupUnusedResources: (force: boolean) => void;
+        highlightService?: {
+            resetAllHighlightDecorations: (
+                map: Map<string, any>,
+                reset?: boolean
+            ) => void;
+            applyHighlightsToOpenEditors: (map: Map<string, any>) => void;
+        };
+        savePersistentState?: () => void;
+    }
+): { cleanupInterval?: NodeJS.Timeout } {
+    const result: { cleanupInterval?: NodeJS.Timeout } = {};
+
+    const highlightService = params.highlightService || {
+        resetAllHighlightDecorations:
+            require("./highlightService").resetAllHighlightDecorations,
+        applyHighlightsToOpenEditors:
+            require("./highlightService").applyHighlightsToOpenEditors,
+    };
+
+    const savePersistentState =
+        params.savePersistentState ||
+        require("./stateService").savePersistentState;
+
+    if (e.affectsConfiguration("chainGrep.system.cleanupInterval")) {
+        const intervalMs = getCleanupInterval();
+        if (params.cleanupInterval) {
+            clearInterval(params.cleanupInterval);
+            result.cleanupInterval = undefined;
+        }
+
+        if (intervalMs > 0) {
+            result.cleanupInterval = setInterval(
+                () => params.cleanupUnusedResources(false),
+                intervalMs
+            );
+            showStatusMessage(
+                `ChainGrep: Cleanup interval changed to ${
+                    intervalMs / 60000
+                } minutes`
+            );
+        } else {
+            showStatusMessage(`ChainGrep: Automatic cleanup disabled`);
+        }
+    }
+
+    if (
+        e.affectsConfiguration("chainGrep.highlights.showScrollbarIndicators")
+    ) {
+        highlightService.resetAllHighlightDecorations(params.chainGrepMap);
+        highlightService.applyHighlightsToOpenEditors(params.chainGrepMap);
+    }
+
+    if (e.affectsConfiguration("chainGrep.highlights.palette")) {
+        console.log(
+            "Chain Grep: Color palette changed, resetting all highlights"
+        );
+        highlightService.resetAllHighlightDecorations(
+            params.chainGrepMap,
+            true
+        );
+    }
+
+    if (e.affectsConfiguration("chainGrep.highlights.randomOrder")) {
+        highlightService.resetAllHighlightDecorations(
+            params.chainGrepMap,
+            true
+        );
+    }
+
+    if (e.affectsConfiguration("chainGrep.bookmarks.color")) {
+        params.bookmarkProvider.updateDecorationStyle();
+    }
+
+    if (
+        e.affectsConfiguration("chainGrep.bookmarks.showSymbols") ||
+        e.affectsConfiguration("chainGrep.bookmarks.showLabels")
+    ) {
+        params.bookmarkProvider.updateDecorationStyle();
+    }
+
+    if (
+        e.affectsConfiguration("chainGrep.highlights.palette") ||
+        e.affectsConfiguration(
+            "chainGrep.highlights.showScrollbarIndicators"
+        ) ||
+        e.affectsConfiguration("chainGrep.highlights.randomOrder") ||
+        e.affectsConfiguration("chainGrep.bookmarks.color") ||
+        e.affectsConfiguration("chainGrep.bookmarks.showSymbols") ||
+        e.affectsConfiguration("chainGrep.bookmarks.showLabels")
+    ) {
+        savePersistentState();
+    }
+
+    return result;
 }

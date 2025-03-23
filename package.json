@@ -314,45 +314,60 @@
         "configuration": {
             "title": "Chain Grep",
             "properties": {
-                "chainGrep.colours": {
+                "chainGrep.highlights.palette": {
                     "type": "string",
                     "default": "#89CFF0:black, #FF6961:black, #77DD77:black, #C3A8FF:black, #FDFD96:black, #A0E7E5:black, #FFB7CE:black, #CCFF90:black, #B19CD9:black, #FF82A9:black, #A8BFFF:black, #FFDAB9:black, #A8D0FF:black, #FFE680:black, #A8E0FF:black, #FFCBA4:black, #E6A8D7:black, #FFCCD2:black, #ACE1AF:black, #FF99FF:black",
                     "description": "Comma-separated list of background:foreground color pairs for highlights. Leave empty for default set."
                 },
-                "chainGrep.bookmarkColor": {
+                "chainGrep.bookmarks.color": {
                     "type": "string",
                     "default": "#3794FF",
-                    "description": "Color for bookmark indicators. Use CSS color format."
+                    "description": "Color for bookmark indicators and backgrounds. Use CSS color format."
                 },
-                "chainGrep.randomColors": {
+                "chainGrep.highlights.randomOrder": {
                     "type": "boolean",
                     "default": false,
                     "description": "Use a randomized order for highlight colors. Changing this setting will clear all highlights."
                 },
-                "chainGrep.detailedChainDoc": {
+                "chainGrep.documents.showDetailedInfo": {
                     "type": "boolean",
                     "default": true,
                     "description": "Include detailed chain information in result documents."
                 },
-                "chainGrep.cleanupInterval": {
+                "chainGrep.system.cleanupInterval": {
                     "type": "number",
                     "default": 5,
                     "description": "How often to clean up orphaned resources (in minutes). Set to 0 to disable automatic cleanup."
                 },
-                "chainGrep.maxBaseNameLength": {
+                "chainGrep.system.cleanupLogging": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Enable detailed logging during cleanup operations for debugging purposes."
+                },
+                "chainGrep.documents.maxBaseNameLength": {
                     "type": "number",
                     "default": 70,
                     "description": "Maximum length of source filename in result documents filenames. Set to 0 to disable truncation."
                 },
-                "chainGrep.maxChainDescriptorLength": {
+                "chainGrep.documents.maxChainDescriptorLength": {
                     "type": "number",
                     "default": 30,
                     "description": "Maximum length of chain descriptor in result documents filenames. Set to 0 to disable truncation."
                 },
-                "chainGrep.showScrollbarIndicators": {
+                "chainGrep.highlights.showScrollbarIndicators": {
                     "type": "boolean",
                     "default": true,
                     "description": "Show highlight indicators in the scrollbar (overview ruler)."
+                },
+                "chainGrep.bookmarks.showSymbols": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Show bookmark symbols (❱, ❰) around bookmarked lines. When disabled, bookmarks will still show background color."
+                },
+                "chainGrep.bookmarks.showLabels": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Show bookmark labels at the end of bookmarked lines. When disabled, labels will still be stored but not displayed."
                 }
             }
         }

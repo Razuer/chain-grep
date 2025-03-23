@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { Bookmark } from "./interfaces";
 import { getChainGrepMap } from "../services/stateService";
+import { buildChainPath } from "../utils/utils";
 
 export enum BookmarkNodeType {
     Category = "category",
@@ -89,14 +90,11 @@ export class BookmarkNode extends vscode.TreeItem {
         }
 
         // Regular bookmark
-        if (this.parent && this.parent.type === BookmarkNodeType.FileRoot) {
-            // In file root context
-            this.label = this.getFormattedLabel();
-            this.iconPath = new vscode.ThemeIcon("bookmark");
-        } else if (!bookmark.docUri) {
-            // Source file reference
-            this.label = "Source File";
-            this.iconPath = new vscode.ThemeIcon("file-code");
+        const isFileRoot = this.parent?.type === BookmarkNodeType.FileRoot;
+        this.label = this.getFormattedLabel();
+        this.iconPath = new vscode.ThemeIcon("bookmark");
+
+        if (!isFileRoot && !bookmark.docUri) {
             this.description = `Line ${bookmark.lineNumber + 1}`;
         }
 
@@ -109,12 +107,8 @@ export class BookmarkNode extends vscode.TreeItem {
             const chainInfo = chainGrepMap.get(this.bookmark.docUri);
 
             if (chainInfo && chainInfo.chain && chainInfo.chain.length > 0) {
-                const lastQuery = chainInfo.chain[chainInfo.chain.length - 1];
-                const queryType = lastQuery.type;
-                const query =
-                    lastQuery.query.substring(0, 15) +
-                    (lastQuery.query.length > 15 ? "..." : "");
-                this.label = `[${queryType === "text" ? "T" : "R"}] "${query}"`;
+                const chainPath = buildChainPath(chainInfo.chain);
+                this.label = chainPath;
             } else {
                 this.label = "Chain Grep";
             }

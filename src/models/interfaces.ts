@@ -36,3 +36,9 @@ export interface Bookmark {
         relativePosition?: number;
     };
 }
+
+export interface BookmarkCache {
+    fileLineCache: Map<string, Map<number, string[]>>;
+    contentHashCache: Map<string, string>;
+    documentTimestamps: Map<string, number>;
+}

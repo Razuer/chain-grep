@@ -92,13 +92,8 @@ export function initHighlightDecorations() {
             globalHighlightWords.push(undefined);
         }
     });
-
-    console.log(
-        `Chain Grep: Initialized ${highlightDecorations.length} global highlight decorations`
-    );
 }
 
-// Alias for compatibility with both versions
 export const initGlobalHighlightDecorations = initHighlightDecorations;
 
 function chooseNextGlobalHighlight(): number {
@@ -167,7 +162,9 @@ export function toggleHighlightGlobal(
 
     const docUri = editor.document.uri.toString();
     const groupKey = getLocalHighlightKey(docUri, chainGrepMap);
-    const state = getLocalHighlightState(groupKey);
+    const state =
+        getExistingLocalHighlightState(groupKey) ||
+        createLocalHighlightState(groupKey);
     const localIdx = state.words.findIndex((w) => w === selectionText);
 
     if (localIdx !== -1) {
@@ -251,18 +248,27 @@ export function getLocalHighlightKey(
     return docUri;
 }
 
-export function getLocalHighlightState(groupKey: string): LocalHighlightState {
-    let existing = localHighlightMap.get(groupKey);
-    if (!existing) {
-        const newDecs = createHighlightDecorationsFromColours(groupKey);
-        existing = {
-            decorations: newDecs,
-            words: new Array(newDecs.length).fill(undefined),
-            next: 0,
-        };
-        localHighlightMap.set(groupKey, existing);
-    }
-    return existing;
+export function hasLocalHighlightState(groupKey: string): boolean {
+    return localHighlightMap.has(groupKey);
+}
+
+export function getExistingLocalHighlightState(
+    groupKey: string
+): LocalHighlightState | undefined {
+    return localHighlightMap.get(groupKey);
+}
+
+export function createLocalHighlightState(
+    groupKey: string
+): LocalHighlightState {
+    const newDecs = createHighlightDecorationsFromColours(groupKey);
+    const newState = {
+        decorations: newDecs,
+        words: new Array(newDecs.length).fill(undefined),
+        next: 0,
+    };
+    localHighlightMap.set(groupKey, newState);
+    return newState;
 }
 
 function createHighlightDecorationsFromColours(
@@ -303,10 +309,19 @@ function createHighlightDecorationsFromColours(
 
 function chooseNextLocalHighlight(groupKey: string): number {
     if (!localColorQueues.has(groupKey)) {
-        const state = getLocalHighlightState(groupKey);
+        const stateExists = hasLocalHighlightState(groupKey);
+        let decoLength = 10;
+
+        if (stateExists) {
+            const state = getExistingLocalHighlightState(groupKey);
+            if (state) {
+                decoLength = state.decorations.length;
+            }
+        }
+
         localColorQueues.set(
             groupKey,
-            new ColorQueue(state.decorations.length, areRandomColorsEnabled())
+            new ColorQueue(decoLength, areRandomColorsEnabled())
         );
     }
 
@@ -320,9 +335,11 @@ export function addHighlightLocal(
 ) {
     const docUri = editor.document.uri.toString();
     const groupKey = getLocalHighlightKey(docUri, chainGrepMap);
-    const state = getLocalHighlightState(groupKey);
 
     removeHighlightForTextLocal(docUri, text, chainGrepMap);
+
+    const state =
+        localHighlightMap.get(groupKey) || createLocalHighlightState(groupKey);
 
     const idx = chooseNextLocalHighlight(groupKey);
 
@@ -344,7 +361,14 @@ function applyHighlightForTextLocal(
 ) {
     const docUri = editor.document.uri.toString();
     const groupKey = getLocalHighlightKey(docUri, chainGrepMap);
-    const state = getLocalHighlightState(groupKey);
+    const state = getExistingLocalHighlightState(groupKey);
+
+    if (!state) {
+        console.error(
+            `Chain Grep: No highlight state found for group ${groupKey} when trying to apply highlight`
+        );
+        return;
+    }
 
     if (idx >= state.decorations.length) {
         console.error(
@@ -355,7 +379,10 @@ function applyHighlightForTextLocal(
         return;
     }
 
-    function decorateSingle(ed: vscode.TextEditor) {
+    function decorateSingle(
+        ed: vscode.TextEditor,
+        decorations: vscode.TextEditorDecorationType[]
+    ) {
         if (
             getLocalHighlightKey(ed.document.uri.toString(), chainGrepMap) !==
             groupKey
@@ -371,10 +398,10 @@ function applyHighlightForTextLocal(
             const endPos = ed.document.positionAt(match.index + text.length);
             decoOpts.push({ range: new vscode.Range(startPos, endPos) });
         }
-        ed.setDecorations(state.decorations[idx], decoOpts);
+        ed.setDecorations(decorations[idx], decoOpts);
     }
 
-    decorateSingle(editor);
+    decorateSingle(editor, state.decorations);
 
     for (const ed of vscode.window.visibleTextEditors) {
         if (ed === editor) {
@@ -384,7 +411,7 @@ function applyHighlightForTextLocal(
             getLocalHighlightKey(ed.document.uri.toString(), chainGrepMap) ===
             groupKey
         ) {
-            decorateSingle(ed);
+            decorateSingle(ed, state.decorations);
         }
     }
 }
@@ -395,7 +422,12 @@ export function removeHighlightForTextLocal(
     chainGrepMap: Map<string, any>
 ) {
     const groupKey = getLocalHighlightKey(docUri, chainGrepMap);
-    const state = getLocalHighlightState(groupKey);
+    const state = getExistingLocalHighlightState(groupKey);
+
+    if (!state) {
+        return;
+    }
+
     const idx = state.words.findIndex((w) => w === text);
     if (idx === -1) {
         return;
@@ -434,9 +466,9 @@ export function toggleHighlightLocal(
 
     const docUri = editor.document.uri.toString();
     const groupKey = getLocalHighlightKey(docUri, chainGrepMap);
-    const state = getLocalHighlightState(groupKey);
-    const idx = state.words.findIndex((w) => w === text);
-    if (idx === -1) {
+    const state = getExistingLocalHighlightState(groupKey);
+
+    if (!state || state.words.findIndex((w) => w === text) === -1) {
         addHighlightLocal(editor, text, chainGrepMap);
     } else {
         removeHighlightForTextLocal(docUri, text, chainGrepMap);
@@ -449,7 +481,11 @@ export function clearHighlightsLocal(
 ) {
     const docUri = editor.document.uri.toString();
     const groupKey = getLocalHighlightKey(docUri, chainGrepMap);
-    const state = getLocalHighlightState(groupKey);
+    const state = getExistingLocalHighlightState(groupKey);
+
+    if (!state) {
+        return;
+    }
 
     for (const ed of vscode.window.visibleTextEditors) {
         if (
@@ -479,6 +515,11 @@ export function clearHighlightsLocal(
 
     state.words.fill(undefined);
     state.next = 0;
+
+    localHighlightMap.delete(groupKey);
+    console.log(
+        `Chain Grep: Removed empty highlight group after clearing: ${groupKey}`
+    );
 }
 
 export function reapplyHighlightsLocal(
@@ -487,7 +528,11 @@ export function reapplyHighlightsLocal(
 ) {
     const docUri = editor.document.uri.toString();
     const groupKey = getLocalHighlightKey(docUri, chainGrepMap);
-    const state = getLocalHighlightState(groupKey);
+    const state = getExistingLocalHighlightState(groupKey);
+
+    if (!state) {
+        return;
+    }
 
     for (let i = 0; i < state.words.length; i++) {
         const word = state.words[i];
@@ -536,6 +581,7 @@ export function clearAllLocalHighlights(
     }
 
     let clearedCount = 0;
+    const keysToRemove: string[] = [];
 
     for (const [groupKey, state] of localHighlightMap.entries()) {
         if (state.words.some((w) => w !== undefined)) {
@@ -571,7 +617,29 @@ export function clearAllLocalHighlights(
 
             state.words.fill(undefined);
             state.next = 0;
+
+            keysToRemove.push(groupKey);
+        } else {
+            keysToRemove.push(groupKey);
         }
+    }
+
+    for (const key of keysToRemove) {
+        localHighlightMap.delete(key);
+
+        if (localHighlightColorMaps.has(key)) {
+            localHighlightColorMaps.delete(key);
+        }
+
+        if (localColorQueues.has(key)) {
+            localColorQueues.delete(key);
+        }
+
+        if (localColorIndexMaps.has(key)) {
+            localColorIndexMaps.delete(key);
+        }
+
+        console.log(`Chain Grep: Removed highlight group for ${key}`);
     }
 
     if (clearedCount > 0) {
@@ -605,11 +673,6 @@ export function getHighlightState() {
         ),
     };
 
-    console.log(
-        `Chain Grep: Saved highlight state with ${
-            globalHighlightWords.filter((w) => w !== undefined).length
-        } global highlights`
-    );
     return state;
 }
 
@@ -657,7 +720,16 @@ export function restoreHighlightState(state: any) {
 
         if (state.localHighlights) {
             let restoredGroupCount = 0;
-            for (const [key, stateObj] of state.localHighlights) {
+            const isMap =
+                state.localHighlights instanceof Map ||
+                (typeof state.localHighlights[Symbol.iterator] === "function" &&
+                    typeof state.localHighlights.delete === "function");
+
+            const localHighlightsMap = isMap
+                ? state.localHighlights
+                : new Map(state.localHighlights);
+
+            for (const [key, stateObj] of localHighlightsMap) {
                 const hasActiveHighlights =
                     Array.isArray(stateObj.words) &&
                     stateObj.words.some(
@@ -668,19 +740,31 @@ export function restoreHighlightState(state: any) {
                     );
 
                 if (hasActiveHighlights) {
-                    const localState = getLocalHighlightState(key);
+                    const localState = createLocalHighlightState(key);
                     localState.words = stateObj.words;
                     localState.next = stateObj.next;
                     restoredGroupCount++;
                 } else {
+                    if (isMap) {
+                        localHighlightsMap.delete(key);
+                    } else if (Array.isArray(state.localHighlights)) {
+                        state.localHighlights = state.localHighlights.filter(
+                            ([k]: [string, any]) => k !== key
+                        );
+                    }
+                    if (localHighlightMap.has(key)) {
+                        localHighlightMap.delete(key);
+                    }
                     console.log(
-                        `Chain Grep: Skipping empty local highlight group for ${key}`
+                        `Chain Grep: Removed empty local highlight group for ${key}`
                     );
                 }
             }
             console.log(
                 `Chain Grep: Restored local highlights for ${restoredGroupCount} groups`
             );
+
+            removeEmptyHighlightGroups();
         }
 
         if (state.globalHighlightColorMap) {
@@ -799,7 +883,8 @@ export function resetAllHighlightDecorations(
                     groupKey,
                     savedState,
                 ] of savedLocalStates.entries()) {
-                    const state = getLocalHighlightState(groupKey);
+                    // Tworzymy nowy stan dla każdej zapisanej grupy
+                    const state = createLocalHighlightState(groupKey);
                     for (
                         let i = 0;
                         i <
@@ -843,4 +928,44 @@ export function resetAllHighlightDecorations(
             error
         );
     }
+}
+
+function removeEmptyHighlightGroups(): number {
+    let removedCount = 0;
+    const keysToRemove: string[] = [];
+
+    for (const [groupKey, state] of localHighlightMap.entries()) {
+        if (!state.words.some((word) => word !== undefined)) {
+            keysToRemove.push(groupKey);
+        }
+    }
+
+    for (const key of keysToRemove) {
+        localHighlightMap.delete(key);
+
+        if (localHighlightColorMaps.has(key)) {
+            localHighlightColorMaps.delete(key);
+        }
+
+        if (localColorQueues.has(key)) {
+            localColorQueues.delete(key);
+        }
+
+        if (localColorIndexMaps.has(key)) {
+            localColorIndexMaps.delete(key);
+        }
+
+        removedCount++;
+        console.log(
+            `Chain Grep: Removed empty highlight group for key: ${key}`
+        );
+    }
+
+    if (removedCount > 0) {
+        console.log(
+            `Chain Grep: Removed ${removedCount} empty highlight groups`
+        );
+    }
+
+    return removedCount;
 }

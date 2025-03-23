@@ -4,7 +4,6 @@ import { getHighlightState, restoreHighlightState } from "./highlightService";
 import { ChainGrepDataProvider } from "../providers/chainGrepDataProvider";
 import { showStatusMessage } from "./configService";
 import { BookmarkProvider } from "../providers/bookmarkProvider";
-import { Bookmark } from "../models/interfaces";
 
 let extensionContext: vscode.ExtensionContext;
 
