@@ -10,7 +10,14 @@
 -   **Custom Popup**: A minimal QuickPick-based interface for entering your query and toggling "Invert" or "Case Sensitive".
 -   **Selection Shortcut**: Press `CTRL+ALT+G` (or your custom keybinding) to grep any currently selected text.
 -   **Results in a Separate Document**: Each chain's results appear in a new document, which can show just the matches or include a more detailed log, depending on your settings.
--   **Activity Bar Tree**: The extension displays a tree in the Activity Bar, showing each file's chain entries. You can expand, open, or close nodes, making it easy to navigate multiple chain results.
+-   **Activity Bar Tree**: The extension displays a tree in the Activity Bar, showing each file's chain entries and bookmarks. You can expand, open, or close nodes, making it easy to navigate multiple chain results.
+-   **Bookmarks System**:
+    -   Add bookmarks to any line in source files or chain grep results
+    -   Bookmarks automatically synchronize between source files and all chained documents
+    -   Optional labels for better organization
+    -   Intelligent bookmark tracking that updates positions when files change
+    -   Simple navigation between bookmarks with a tree view
+    -   Visual indicators in the editor for bookmarked lines
 -   **Highlighting System**:
     -   Toggle highlights for any string or special character
     -   Persistent highlights across file switches
@@ -44,6 +51,9 @@
 -   **Chain Grep: Clear Chained Highlights (All Files)**: Removes all chained highlights across all files at once.
 -   **Chain Grep: Close All Results**: Closes all search result documents and cleans up the tree view.
 -   **Chain Grep: Force Memory Cleanup**: Manually triggers cleanup of unused resources when needed.
+-   **Chain Grep: Add Bookmark**: Adds a bookmark at the current line with an optional label.
+-   **Chain Grep: Clear All Bookmarks**: Removes all bookmarks from all files.
+-   **Chain Grep: Clear Document Bookmarks**: Removes all bookmarks from the current document.
 
 ### Typical Workflow
 
@@ -54,6 +64,9 @@
 5. Check the Activity Bar to see a list of chain entries per file.
 6. If the source file changes, use **Chain Grep: Refresh**.
 7. Use **Toggle Highlight** to mark strings. Return to the file anytime, and highlights remain.
+8. Add bookmarks to important lines using **CTRL+ALT+B** or the context menu.
+9. Navigate between bookmarks using the Bookmarks view in the Activity Bar.
+10. Bookmarks will automatically synchronize between your source file and all chained documents.
 
 ## Installation Options
 
@@ -110,6 +123,11 @@ The extension provides default keybindings. Make sure they are not overridden by
     "command": "chainGrep.toggleHighlightGlobal",
     "key": "ctrl+alt+shift+m",
     "when": "editorTextFocus"
+},
+{
+    "command": "chainGrep.addBookmark",
+    "key": "ctrl+alt+b",
+    "when": "editorTextFocus"
 }
 ```
 
@@ -119,55 +137,76 @@ Below are some optional configuration keys that can be added to your user or wor
 
 ```json
 {
-    "chainGrep.randomColors": false,
-    "chainGrep.colours": "#89CFF0:black, #FF6961:black",
-    "chainGrep.detailedChainDoc": true,
-    "chainGrep.showScrollbarIndicators": true,
-    "chainGrep.cleanupInterval": 5,
-    "chainGrep.maxBaseNameLength": 70,
-    "chainGrep.maxChainDescriptorLength": 30
+    "chainGrep.highlights.randomOrder": false,
+    "chainGrep.highlights.palette": "#89CFF0:black, #FF6961:black",
+    "chainGrep.documents.showDetailedInfo": true,
+    "chainGrep.highlights.showScrollbarIndicators": true,
+    "chainGrep.system.cleanupInterval": 5,
+    "chainGrep.documents.maxBaseNameLength": 70,
+    "chainGrep.documents.maxChainDescriptorLength": 30,
+    "chainGrep.bookmarks.color": "#3794FF",
+    "chainGrep.bookmarks.showSymbols": true,
+    "chainGrep.bookmarks.showLabels": true
 }
 ```
 
--   **`chainGrep.randomColors` (boolean)**
+-   **`chainGrep.highlights.randomOrder` (boolean)**
 
     -   `true` => Shuffles the highlight color palette randomly.
     -   `false` => Uses the palette in the given order.
     -   Default is `false`.
 
--   **`chainGrep.colours` (string)**
+-   **`chainGrep.highlights.palette` (string)**
 
     -   A comma-separated list of color pairs in the format `background:foreground`, e.g. `#89CFF0:black, #FF6961:black`.
     -   If not set, the extension uses a default palette.
 
--   **`chainGrep.detailedChainDoc` (boolean)**
+-   **`chainGrep.documents.showDetailedInfo` (boolean)**
 
     -   `true` => Displays detailed chain steps (header, queries, flags) in the results doc.
     -   `false` => Shows only the raw matched lines.
     -   Default is `true`.
 
--   **`chainGrep.showScrollbarIndicators` (boolean)**
+-   **`chainGrep.highlights.showScrollbarIndicators` (boolean)**
 
     -   `true` => Shows highlight indicators in the scrollbar (overview ruler).
     -   `false` => Hides highlight indicators in the scrollbar.
     -   Default is `true`.
 
--   **`chainGrep.cleanupInterval` (number)**
+-   **`chainGrep.system.cleanupInterval` (number)**
 
     -   Time in minutes between automatic cleanups of unused resources.
     -   Set to 0 to disable automatic cleanup.
     -   Default is 5 minutes.
 
--   **`chainGrep.maxBaseNameLength` (number)**
+-   **`chainGrep.documents.maxBaseNameLength` (number)**
 
     -   Maximum length of source filename in result documents filenames.
     -   Set to 0 to disable truncation.
     -   Default is 70 characters.
 
--   **`chainGrep.maxChainDescriptorLength` (number)**
+-   **`chainGrep.documents.maxChainDescriptorLength` (number)**
+
     -   Maximum length of chain descriptor in result documents filenames.
     -   Set to 0 to disable truncation.
     -   Default is 30 characters.
+
+-   **`chainGrep.bookmarks.color` (string)**
+
+    -   Color for bookmark indicators and backgrounds.
+    -   Use CSS color format, e.g., "#3794FF".
+    -   Default is "#3794FF".
+
+-   **`chainGrep.bookmarks.showSymbols` (boolean)**
+
+    -   `true` => Shows bookmark symbols (❱, ❰) around bookmarked lines.
+    -   `false` => Only shows background color for bookmarked lines.
+    -   Default is `true`.
+
+-   **`chainGrep.bookmarks.showLabels` (boolean)**
+    -   `true` => Shows bookmark labels at the end of bookmarked lines.
+    -   `false` => Labels are stored but not displayed.
+    -   Default is `true`.
 
 ## Contributing
 

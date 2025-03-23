@@ -35,7 +35,6 @@ import {
 import {
     addBookmarkAtCurrentLine,
     removeFileBookmarks,
-    removeCategoryBookmarks,
     clearCurrentDocumentBookmarks,
 } from "./services/bookmarkService";
 import { getSelectedTextOrWord } from "./utils/utils";
@@ -203,9 +202,11 @@ export async function activate(context: vscode.ExtensionContext) {
     const removeBookmarkCmd = vscode.commands.registerCommand(
         "_chainGrep.removeBookmark",
         (node: BookmarkNode) => {
-            bookmarkProvider.removeBookmark(node.bookmark.id);
+            bookmarkProvider.removeBookmarkWithRelated(node.bookmark.id);
             debouncedSaveState();
-            vscode.window.showInformationMessage("Bookmark removed.");
+            vscode.window.showInformationMessage(
+                "Bookmark and related references removed."
+            );
         }
     );
 
@@ -519,14 +520,6 @@ export async function activate(context: vscode.ExtensionContext) {
         }
     );
 
-    const removeCategoryBookmarksCommand = vscode.commands.registerCommand(
-        "_chainGrep.removeCategoryBookmarks",
-        (node: BookmarkNode) => {
-            removeCategoryBookmarks(node, bookmarkProvider);
-            debouncedSaveState();
-        }
-    );
-
     context.subscriptions.push(
         openNodeCmd,
         closeNodeCmd,
@@ -537,7 +530,6 @@ export async function activate(context: vscode.ExtensionContext) {
         clearBookmarksCmd,
         clearCurrentDocBookmarksCmd,
         removeFileBookmarksCommand,
-        removeCategoryBookmarksCommand,
         vscode.window.onDidChangeActiveTextEditor((editor) => {
             if (editor) {
                 reapplyHighlightsLocal(editor, chainGrepMap);
@@ -611,9 +603,67 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.workspace.onDidChangeTextDocument((event) => {
             const activeEditor = vscode.window.activeTextEditor;
             if (activeEditor && event.document === activeEditor.document) {
-                setTimeout(() => {
-                    bookmarkProvider.reapplyAllBookmarkDecorations();
-                }, 100);
+                bookmarkProvider
+                    .updateBookmarkPositionsForDocument(
+                        event.document,
+                        event.contentChanges
+                    )
+                    .then((changed) => {
+                        setTimeout(() => {
+                            bookmarkProvider.reapplyAllBookmarkDecorations();
+
+                            if (activeEditor) {
+                                const lineNumber =
+                                    activeEditor.selection.active.line;
+                                const docUri =
+                                    activeEditor.document.uri.toString();
+
+                                let hasBookmark = false;
+
+                                if (docUri.startsWith("chaingrep:")) {
+                                    hasBookmark =
+                                        bookmarkProvider.hasBookmarkAtLine(
+                                            docUri,
+                                            lineNumber
+                                        );
+                                } else {
+                                    hasBookmark =
+                                        bookmarkProvider.hasSourceBookmarkAtLine(
+                                            docUri,
+                                            lineNumber
+                                        );
+
+                                    if (!hasBookmark) {
+                                        const sourceBookmarks =
+                                            bookmarkProvider.getSourceBookmarksAtLine(
+                                                docUri,
+                                                lineNumber
+                                            );
+                                        hasBookmark = sourceBookmarks.some(
+                                            (b) =>
+                                                b.linkedBookmarkId !== undefined
+                                        );
+                                    }
+                                }
+
+                                vscode.commands.executeCommand(
+                                    "setContext",
+                                    "editorHasBookmark",
+                                    hasBookmark
+                                );
+                            }
+                        }, 100);
+
+                        if (changed) {
+                            debouncedSaveState();
+                        }
+                    })
+                    .catch((error) => {
+                        console.error(
+                            "Error updating bookmark positions:",
+                            error
+                        );
+                    });
             }
         }),
         vscode.workspace.onDidOpenTextDocument((document) => {

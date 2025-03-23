@@ -431,19 +431,3 @@ export function removeFileBookmarks(
     bookmarkProvider.removeBookmarksForSourceFile(node.bookmark.sourceUri);
     vscode.window.showInformationMessage("All bookmarks in file removed.");
 }
-
-export function removeCategoryBookmarks(
-    node: BookmarkNode,
-    bookmarkProvider: BookmarkProvider
-): void {
-    if (node.type !== BookmarkNodeType.Category) {
-        vscode.window.showInformationMessage(
-            "This operation is only valid for bookmark category nodes."
-        );
-        return;
-    }
-    bookmarkProvider.removeBookmarkWithRelated(node.bookmark.id);
-    vscode.window.showInformationMessage(
-        "Bookmark and all related references removed."
-    );
-}
