@@ -2,17 +2,9 @@ import * as vscode from "vscode";
 import { ChainGrepNode } from "../models/chainGrepNode";
 import { ChainGrepQuery } from "../models/interfaces";
 import { ChainGrepDataProvider } from "../providers/chainGrepDataProvider";
-import {
-    getChainGrepMap,
-    getChainGrepContents,
-    savePersistentState,
-} from "./stateService";
+import { getChainGrepMap, getChainGrepContents, savePersistentState } from "./stateService";
 import { BookmarkProvider } from "../providers/bookmarkProvider";
-import {
-    executeChainSearch,
-    buildChainDetailedHeader,
-    generateChainGrepDocUri,
-} from "./searchService";
+import { executeChainSearch, buildChainDetailedHeader, generateChainGrepDocUri } from "./searchService";
 import { isDetailedChainDocEnabled } from "./configService";
 import { reapplyHighlightsLocal } from "./highlightService";
 
@@ -61,41 +53,24 @@ export async function executeChainSearchAndDisplayResults(
             if (parentDocUri) {
                 provider.addSubChain(parentDocUri, nodeLabel, chain, docUriStr);
             } else {
-                provider.addRootChain(
-                    sourceUri.toString(),
-                    nodeLabel,
-                    chain,
-                    docUriStr
-                );
+                provider.addRootChain(sourceUri.toString(), nodeLabel, chain, docUriStr);
             }
 
-            vscode.window.setStatusBarMessage(
-                `Chain Grep: Opened existing search results`,
-                2000
-            );
+            vscode.window.setStatusBarMessage(`Chain Grep: Opened existing search results`, 2000);
             return;
         } catch (error) {
-            console.error(
-                "Failed to open existing chain grep document:",
-                error
-            );
+            console.error("Failed to open existing chain grep document:", error);
             existingDocWithContent = false;
         }
     }
 
-    const { lines: results, stats } = await executeChainSearch(
-        sourceUri,
-        chain
-    );
+    const { lines: results, stats } = await executeChainSearch(sourceUri, chain);
     if (!results.length) {
         vscode.window.showInformationMessage("No matches found.");
         return;
     } else {
         vscode.window.setStatusBarMessage(
-            `Chain Grep: ${results.length} matches (${(
-                (results.length / stats.totalLines) *
-                100
-            ).toFixed(1)}%)`,
+            `Chain Grep: ${results.length} matches (${((results.length / stats.totalLines) * 100).toFixed(1)}%)`,
             5000
         );
     }
@@ -121,19 +96,10 @@ export async function executeChainSearchAndDisplayResults(
     if (parentDocUri) {
         provider.addSubChain(parentDocUri, nodeLabel, chain, docUriStr);
     } else {
-        provider.addRootChain(
-            sourceUri.toString(),
-            nodeLabel,
-            chain,
-            docUriStr
-        );
+        provider.addRootChain(sourceUri.toString(), nodeLabel, chain, docUriStr);
     }
 
-    await synchronizeExistingBookmarks(
-        sourceUri.toString(),
-        docUri.toString(),
-        bookmarkProv
-    );
+    await synchronizeExistingBookmarks(sourceUri.toString(), docUri.toString(), bookmarkProv);
 
     savePersistentState();
 }
@@ -186,15 +152,10 @@ export async function executeChainSearchAndUpdateEditor(
     await bookmarkProv.synchronizeBookmarks(docUri, doc);
 
     for (const oldBookmark of existingBookmarks) {
-        const existingBookmarkNow = bookmarkProv
-            .getAllBookmarks()
-            .find((b) => b.id === oldBookmark.id);
+        const existingBookmarkNow = bookmarkProv.getAllBookmarks().find((b) => b.id === oldBookmark.id);
 
         if (!existingBookmarkNow) {
-            const matchingLine = await bookmarkProv.findBestMatchingLine(
-                oldBookmark,
-                docUri
-            );
+            const matchingLine = await bookmarkProv.findBestMatchingLine(oldBookmark, docUri);
 
             if (matchingLine !== undefined) {
                 const lineText = doc.lineAt(matchingLine).text.trim();
@@ -234,9 +195,7 @@ export async function synchronizeExistingBookmarks(
         return;
     }
 
-    const chainDoc = await vscode.workspace.openTextDocument(
-        vscode.Uri.parse(chainDocUri)
-    );
+    const chainDoc = await vscode.workspace.openTextDocument(vscode.Uri.parse(chainDocUri));
 
     for (const bookmark of sourceBookmarks) {
         try {
@@ -246,11 +205,7 @@ export async function synchronizeExistingBookmarks(
                     sourceUri: bookmark.sourceUri,
                     occurrenceIndex: bookmark.context?.occurrenceIndex,
                 })
-                .find(
-                    (b) =>
-                        b.linkedBookmarkId === bookmark.id ||
-                        b.lineText === bookmark.lineText
-                );
+                .find((b) => b.linkedBookmarkId === bookmark.id || b.lineText === bookmark.lineText);
 
             if (existingChainBookmark) {
                 if (
@@ -266,16 +221,10 @@ export async function synchronizeExistingBookmarks(
                 continue;
             }
 
-            const matchingLineNumber =
-                await bookmarkProvider.findBestMatchingLine(
-                    bookmark,
-                    chainDocUri
-                );
+            const matchingLineNumber = await bookmarkProvider.findBestMatchingLine(bookmark, chainDocUri);
 
             if (matchingLineNumber !== undefined && matchingLineNumber >= 0) {
-                const lineText = chainDoc
-                    .lineAt(matchingLineNumber)
-                    .text.trim();
+                const lineText = chainDoc.lineAt(matchingLineNumber).text.trim();
 
                 const existingBookmarkAtLine = bookmarkProvider.findBookmarks({
                     docUri: chainDocUri,
@@ -292,19 +241,12 @@ export async function synchronizeExistingBookmarks(
                     continue;
                 }
 
-                const context = bookmarkProvider.getLineContext(
-                    chainDoc,
-                    matchingLineNumber,
-                    5
-                );
+                const context = bookmarkProvider.getLineContext(chainDoc, matchingLineNumber, 5);
 
-                const relativePosition =
-                    matchingLineNumber / (chainDoc.lineCount || 1);
+                const relativePosition = matchingLineNumber / (chainDoc.lineCount || 1);
 
                 const chainBookmark = {
-                    id: `bookmark_${Date.now()}_${Math.random()
-                        .toString(36)
-                        .substring(2, 11)}`,
+                    id: `bookmark_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
                     lineNumber: matchingLineNumber,
                     lineText,
                     docUri: chainDocUri,
@@ -336,9 +278,7 @@ export async function synchronizeExistingBookmarks(
     bookmarkProvider.reapplyAllBookmarkDecorations();
 }
 
-export function collectNodeAndDescendants(
-    node: ChainGrepNode
-): ChainGrepNode[] {
+export function collectNodeAndDescendants(node: ChainGrepNode): ChainGrepNode[] {
     const result: ChainGrepNode[] = [node];
     for (const child of node.children) {
         result.push(...collectNodeAndDescendants(child));
@@ -366,10 +306,7 @@ export async function openNode(
                     },
                     async () => {
                         const { chain, sourceUri } = chainDoc;
-                        const { lines, stats } = await executeChainSearch(
-                            sourceUri,
-                            chain
-                        );
+                        const { lines, stats } = await executeChainSearch(sourceUri, chain);
                         const header = buildChainDetailedHeader(chain, stats);
                         let content = "";
                         if (isDetailedChainDocEnabled()) {
@@ -390,9 +327,7 @@ export async function openNode(
 
         revealChainNode(node.docUri, chainTreeView, chainGrepProvider);
     } else {
-        const sourceDoc = await vscode.workspace.openTextDocument(
-            node.sourceUri
-        );
+        const sourceDoc = await vscode.workspace.openTextDocument(node.sourceUri);
         await vscode.window.showTextDocument(sourceDoc, { preview: false });
     }
 }
@@ -453,18 +388,9 @@ export async function refreshAndOpenNode(
             preview: false,
         });
 
-        await executeChainSearchAndUpdateEditor(
-            sourceUri,
-            chain,
-            newChainEditor,
-            bookmarkProv
-        );
+        await executeChainSearchAndUpdateEditor(sourceUri, chain, newChainEditor, bookmarkProv);
 
-        await synchronizeExistingBookmarks(
-            sourceUri.toString(),
-            node.docUri,
-            bookmarkProv
-        );
+        await synchronizeExistingBookmarks(sourceUri.toString(), node.docUri, bookmarkProv);
 
         bookmarkProv.refresh();
 
@@ -472,15 +398,11 @@ export async function refreshAndOpenNode(
 
         vscode.window.showInformationMessage("Refreshed successfully.");
     } catch {
-        vscode.window.showInformationMessage(
-            "Unable to refresh the chain doc."
-        );
+        vscode.window.showInformationMessage("Unable to refresh the chain doc.");
     }
 }
 
-export async function recoverFailedChainGrepFiles(
-    bookmarkProvider?: BookmarkProvider
-) {
+export async function recoverFailedChainGrepFiles(bookmarkProvider?: BookmarkProvider) {
     const chainGrepMap = getChainGrepMap();
     const chainGrepContents = getChainGrepContents();
     const bookmarkProv = bookmarkProvider || new BookmarkProvider();
@@ -494,24 +416,13 @@ export async function recoverFailedChainGrepFiles(
             const content = editor.document.getText();
             if (content === "Loading Chain Grep results..." || content === "") {
                 const uriStr = uri.toString();
-                if (
-                    chainGrepMap.has(uriStr) &&
-                    !chainGrepContents.has(uriStr)
-                ) {
+                if (chainGrepMap.has(uriStr) && !chainGrepContents.has(uriStr)) {
                     const chainInfo = chainGrepMap.get(uriStr)!;
 
-                    vscode.window.showInformationMessage(
-                        "Recovering Chain Grep file..."
-                    );
+                    vscode.window.showInformationMessage("Recovering Chain Grep file...");
 
-                    const { lines, stats } = await executeChainSearch(
-                        chainInfo.sourceUri,
-                        chainInfo.chain
-                    );
-                    const header = buildChainDetailedHeader(
-                        chainInfo.chain,
-                        stats
-                    );
+                    const { lines, stats } = await executeChainSearch(chainInfo.sourceUri, chainInfo.chain);
+                    const header = buildChainDetailedHeader(chainInfo.chain, stats);
                     let newContent = "";
                     if (isDetailedChainDocEnabled()) {
                         newContent = header + "\n\n" + lines.join("\n");
@@ -521,9 +432,7 @@ export async function recoverFailedChainGrepFiles(
 
                     chainGrepContents.set(uriStr, newContent);
 
-                    await vscode.commands.executeCommand(
-                        "workbench.action.files.revert"
-                    );
+                    await vscode.commands.executeCommand("workbench.action.files.revert");
 
                     const doc = await vscode.workspace.openTextDocument(uri);
                     bookmarkProv.synchronizeBookmarks(uriStr, doc);
@@ -533,10 +442,7 @@ export async function recoverFailedChainGrepFiles(
     }
 }
 
-export async function closeAllNodes(
-    chainGrepProvider: ChainGrepDataProvider,
-    bookmarkProvider?: BookmarkProvider
-) {
+export async function closeAllNodes(chainGrepProvider: ChainGrepDataProvider, bookmarkProvider?: BookmarkProvider) {
     const chainGrepMap = getChainGrepMap();
     const chainGrepContents = getChainGrepContents();
     const bookmarkProv = bookmarkProvider || new BookmarkProvider();
