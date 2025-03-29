@@ -688,21 +688,17 @@ export async function activate(context: vscode.ExtensionContext) {
         clearAllLocalHighlightsCmd,
         clearAllGlobalHighlightsCmd,
         forceCleanupCmd,
-        vscode.workspace.onDidChangeConfiguration((e) => {
-            const result = handleConfigChange(e, {
+        vscode.workspace.onDidChangeConfiguration(async (e) => {
+            const configResult = handleConfigChange(e, {
                 cleanupInterval,
                 chainGrepMap,
                 bookmarkProvider,
                 cleanupUnusedResources,
-                highlightService: {
-                    resetAllHighlightDecorations,
-                    applyHighlightsToOpenEditors,
-                },
                 savePersistentState,
             });
 
-            if (result.cleanupInterval !== undefined) {
-                cleanupInterval = result.cleanupInterval;
+            if (configResult.cleanupInterval !== undefined) {
+                cleanupInterval = configResult.cleanupInterval;
             }
         }),
         new vscode.Disposable(() => {

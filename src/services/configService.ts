@@ -100,7 +100,15 @@ export function areBookmarkSymbolsEnabled(): boolean {
 }
 
 export function areBookmarkLabelsEnabled(): boolean {
-    return getConfig<boolean>("bookmarks.showLabels", true);
+    return vscode.workspace
+        .getConfiguration("chainGrep")
+        .get<boolean>("bookmarks.showLabels", true);
+}
+
+export function isBookmarkSavingInProjectEnabled(): boolean {
+    return vscode.workspace
+        .getConfiguration("chainGrep")
+        .get<boolean>("saveBookmarksInProject", false);
 }
 
 export function handleConfigChange(
@@ -119,8 +127,11 @@ export function handleConfigChange(
         };
         savePersistentState?: () => void;
     }
-): { cleanupInterval?: NodeJS.Timeout } {
-    const result: { cleanupInterval?: NodeJS.Timeout } = {};
+): { cleanupInterval?: NodeJS.Timeout; configUpdated?: boolean } {
+    const result: {
+        cleanupInterval?: NodeJS.Timeout;
+        configUpdated?: boolean;
+    } = {};
 
     const highlightService = params.highlightService || {
         resetAllHighlightDecorations:
@@ -188,6 +199,32 @@ export function handleConfigChange(
         e.affectsConfiguration("chainGrep.bookmarks.showLabels")
     ) {
         params.bookmarkProvider.updateDecorationStyle();
+    }
+
+    if (
+        e.affectsConfiguration("chainGrep.saveBookmarksInProject") &&
+        savePersistentState
+    ) {
+        const saveInProject = isBookmarkSavingInProjectEnabled();
+
+        savePersistentState();
+
+        if (saveInProject) {
+            if (
+                vscode.workspace.workspaceFolders &&
+                vscode.workspace.workspaceFolders.length > 0
+            ) {
+                vscode.window.showInformationMessage(
+                    "Chain Grep: Bookmarks will now be saved in your project folder, making them available in remote environments."
+                );
+            }
+        } else {
+            vscode.window.showInformationMessage(
+                "Chain Grep: Bookmarks will now be saved in VS Code settings, independent of your project folder."
+            );
+        }
+
+        result.configUpdated = true;
     }
 
     if (

@@ -4,6 +4,9 @@ import { getHighlightState, restoreHighlightState } from "./highlightService";
 import { ChainGrepDataProvider } from "../providers/chainGrepDataProvider";
 import { showStatusMessage } from "./configService";
 import { BookmarkProvider } from "../providers/bookmarkProvider";
+import { isBookmarkSavingInProjectEnabled } from "./configService";
+import * as path from "path";
+import { Bookmark } from "../models/interfaces";
 
 let extensionContext: vscode.ExtensionContext;
 
@@ -11,7 +14,9 @@ const chainGrepMap: Map<string, any> = new Map();
 const chainGrepContents: Map<string, string> = new Map();
 let bookmarkProvider: BookmarkProvider | undefined;
 
-const debouncedSavePersistentState = debounce(() => {
+const BOOKMARKS_FILE_PATH = ".vscode/chain-grep-bookmarks.json";
+
+const debouncedSavePersistentStateInternal = debounce(async () => {
     const chainData = Array.from(chainGrepMap.entries()).map(([uri, data]) => [
         uri,
         { chain: data.chain, sourceUri: data.sourceUri.toString() },
@@ -23,6 +28,23 @@ const debouncedSavePersistentState = debounce(() => {
         ? bookmarkProvider.getAllBookmarks()
         : [];
 
+    // Save bookmarks to workspace file if enabled
+    const saveToWorkspaceEnabled = isBookmarkSavingInProjectEnabled();
+    if (saveToWorkspaceEnabled && bookmarks.length > 0) {
+        const saved = await saveBookmarksToWorkspace(bookmarks);
+        if (saved) {
+            // Still save the state in workspaceState for compatibility
+            extensionContext.workspaceState.update("chainGrepState", {
+                chainData,
+                contentsData,
+                persistentHighlights,
+                bookmarks: [], // Don't duplicate bookmarks in state when saved in file
+            });
+            return;
+        }
+    }
+
+    // If not enabled or saving failed, save bookmarks in workspaceState
     extensionContext.workspaceState.update("chainGrepState", {
         chainData,
         contentsData,
@@ -40,10 +62,192 @@ export function getChainGrepContents(): Map<string, string> {
 }
 
 export function savePersistentState() {
-    debouncedSavePersistentState();
+    debouncedSavePersistentStateInternal();
 }
 
-export function loadPersistentState(
+export async function saveBookmarksToWorkspace(bookmarks: Bookmark[]) {
+    if (
+        !vscode.workspace.workspaceFolders ||
+        vscode.workspace.workspaceFolders.length === 0
+    ) {
+        return false;
+    }
+
+    try {
+        const workspaceFolder = vscode.workspace.workspaceFolders[0];
+        // Używamy URI zamiast ścieżek systemowych dla kompatybilności z Remote Development
+        const vscodeUri = vscode.Uri.joinPath(workspaceFolder.uri, ".vscode");
+        const fileUri = vscode.Uri.joinPath(
+            vscodeUri,
+            "chain-grep-bookmarks.json"
+        );
+
+        // Ensure .vscode directory exists
+        try {
+            await vscode.workspace.fs.stat(vscodeUri);
+        } catch (error) {
+            // Create .vscode directory if it doesn't exist
+            await vscode.workspace.fs.createDirectory(vscodeUri);
+        }
+
+        // Przygotowanie zakładek do zapisu - normalizacja URI dla kompatybilności
+        const preparedBookmarks = bookmarks.map((bookmark) => {
+            // Konwertuj URI do formatu względnego dla Remote Development
+            const normalizedBookmark = { ...bookmark };
+
+            // Jeśli mamy sourceUri i jest to absolutna ścieżka, skonwertuj ją na względną
+            if (normalizedBookmark.sourceUri) {
+                normalizedBookmark.sourceUri = normalizeUriPath(
+                    normalizedBookmark.sourceUri,
+                    workspaceFolder.uri
+                );
+            }
+
+            // Jeśli mamy docUri i jest to absolutna ścieżka, skonwertuj ją na względną
+            if (
+                normalizedBookmark.docUri &&
+                !normalizedBookmark.docUri.startsWith("chaingrep:")
+            ) {
+                normalizedBookmark.docUri = normalizeUriPath(
+                    normalizedBookmark.docUri,
+                    workspaceFolder.uri
+                );
+            }
+
+            return normalizedBookmark;
+        });
+
+        // Save bookmarks to file
+        const bookmarksData = JSON.stringify(preparedBookmarks, null, 2);
+        await vscode.workspace.fs.writeFile(
+            fileUri,
+            Buffer.from(bookmarksData, "utf-8")
+        );
+
+        return true;
+    } catch (error) {
+        console.error("Failed to save bookmarks to workspace file:", error);
+        return false;
+    }
+}
+
+export async function loadBookmarksFromWorkspace(): Promise<Bookmark[] | null> {
+    if (
+        !vscode.workspace.workspaceFolders ||
+        vscode.workspace.workspaceFolders.length === 0
+    ) {
+        return null;
+    }
+
+    try {
+        const workspaceFolder = vscode.workspace.workspaceFolders[0];
+        // Używamy URI zamiast ścieżek systemowych dla kompatybilności z Remote Development
+        const fileUri = vscode.Uri.joinPath(
+            workspaceFolder.uri,
+            ".vscode",
+            "chain-grep-bookmarks.json"
+        );
+
+        // Try to read the bookmarks file
+        try {
+            const fileContent = await vscode.workspace.fs.readFile(fileUri);
+            const bookmarksData = Buffer.from(fileContent).toString("utf-8");
+
+            // Przywracamy zakładki z zachowaniem kompatybilności z Remote Development
+            const bookmarks = JSON.parse(bookmarksData) as Bookmark[];
+
+            // Konwertuj względne ścieżki z powrotem na absolutne
+            return bookmarks.map((bookmark) => {
+                const restoredBookmark = { ...bookmark };
+
+                // Jeśli mamy sourceUri jako ścieżkę względną, konwertuj ją na absolutną
+                if (
+                    restoredBookmark.sourceUri &&
+                    !restoredBookmark.sourceUri.startsWith("file:")
+                ) {
+                    restoredBookmark.sourceUri = denormalizeUriPath(
+                        restoredBookmark.sourceUri,
+                        workspaceFolder.uri
+                    );
+                }
+
+                // Jeśli mamy docUri jako ścieżkę względną, konwertuj ją na absolutną
+                if (
+                    restoredBookmark.docUri &&
+                    !restoredBookmark.docUri.startsWith("chaingrep:") &&
+                    !restoredBookmark.docUri.startsWith("file:")
+                ) {
+                    restoredBookmark.docUri = denormalizeUriPath(
+                        restoredBookmark.docUri,
+                        workspaceFolder.uri
+                    );
+                }
+
+                return restoredBookmark;
+            });
+        } catch (error) {
+            // File doesn't exist or is not accessible
+            return null;
+        }
+    } catch (error) {
+        console.error("Failed to load bookmarks from workspace file:", error);
+        return null;
+    }
+}
+
+// Przekształca absolutne URI na ścieżkę względną w kontekście workspace
+function normalizeUriPath(uriPath: string, workspaceUri: vscode.Uri): string {
+    try {
+        const uri = vscode.Uri.parse(uriPath);
+        // Jeśli to specjalne URI (np. chaingrep:), pozostawiamy bez zmian
+        if (uri.scheme !== "file") {
+            return uriPath;
+        }
+
+        // Konwersja ścieżki absolutnej na względną
+        const workspacePath = workspaceUri.path;
+
+        if (uri.path.startsWith(workspacePath)) {
+            // Jeśli ścieżka jest w obrębie workspace, zapisz ją jako względną
+            return uri.path.substring(workspacePath.length);
+        }
+
+        // Jeśli ścieżka jest poza workspace, pozostaw ją jak jest
+        return uriPath;
+    } catch (error) {
+        console.error("Error normalizing URI path:", error);
+        return uriPath;
+    }
+}
+
+// Przekształca względną ścieżkę na absolutne URI w kontekście workspace
+function denormalizeUriPath(
+    relativePath: string,
+    workspaceUri: vscode.Uri
+): string {
+    try {
+        // Jeśli to już jest absolutne URI, pozostawiamy bez zmian
+        if (relativePath.includes(":")) {
+            return relativePath;
+        }
+
+        // Jeśli to ścieżka względna, łączymy ją z workspace URI
+        // Upewnij się, że ścieżka ma prawidłowy format (usuń lub dodaj ukośnik początkowy)
+        const normalizedPath = relativePath.startsWith("/")
+            ? relativePath
+            : "/" + relativePath;
+
+        return vscode.Uri.joinPath(
+            workspaceUri,
+            normalizedPath.substring(1)
+        ).toString();
+    } catch (error) {
+        console.error("Error denormalizing URI path:", error);
+        return relativePath;
+    }
+}
+
+export async function loadPersistentState(
     context: vscode.ExtensionContext,
     chainGrepProvider: ChainGrepDataProvider,
     bookmarkProv?: BookmarkProvider
@@ -71,13 +275,24 @@ export function loadPersistentState(
         if (state.persistentHighlights) {
             restoreHighlightState(state.persistentHighlights);
         }
-
-        if (state.bookmarks && bookmarkProvider) {
-            bookmarkProvider.loadFromState(state.bookmarks);
-        }
-
-        rebuildTreeViewFromState(chainGrepProvider);
     }
+
+    // Try to load bookmarks from workspace file first if feature is enabled
+    let loadedFromFile = false;
+    if (isBookmarkSavingInProjectEnabled() && bookmarkProvider) {
+        const workspaceBookmarks = await loadBookmarksFromWorkspace();
+        if (workspaceBookmarks && workspaceBookmarks.length > 0) {
+            bookmarkProvider.loadFromState(workspaceBookmarks);
+            loadedFromFile = true;
+        }
+    }
+
+    // If not loaded from file and state contains bookmarks, load from state
+    if (!loadedFromFile && state && state.bookmarks && bookmarkProvider) {
+        bookmarkProvider.loadFromState(state.bookmarks);
+    }
+
+    rebuildTreeViewFromState(chainGrepProvider);
 }
 
 export function setContext(context: vscode.ExtensionContext) {

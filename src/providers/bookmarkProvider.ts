@@ -2218,7 +2218,7 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                 this.bookmarkUpdateDebounceTimer = undefined;
 
                 resolve(results.some((r) => r));
-            }, 300);
+            }, 250);
         });
     }
 
@@ -2239,103 +2239,143 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
 
         let changed = false;
 
-        let minChangedLine = 0;
-        let maxChangedLine = document.lineCount - 1;
+        let affectedLines = new Set<number>();
+        let lineOffsets: Array<{ line: number; delta: number }> = [];
 
         if (contentChanges && contentChanges.length > 0) {
-            for (const change of contentChanges) {
+            let currentOffset = 0;
+
+            const sortedChanges = [...contentChanges].sort(
+                (a, b) => b.range.start.line - a.range.start.line
+            );
+
+            for (const change of sortedChanges) {
                 const startLine = change.range.start.line;
                 const endLine = change.range.end.line;
+                const addedLines = change.text.split("\n").length - 1;
+                const removedLines = endLine - startLine;
+                const lineDelta = addedLines - removedLines;
 
-                minChangedLine = Math.min(minChangedLine, startLine);
-                maxChangedLine = Math.max(maxChangedLine, endLine);
+                for (let i = startLine; i <= endLine; i++) {
+                    affectedLines.add(i);
+                }
+
+                if (lineDelta !== 0) {
+                    currentOffset += lineDelta;
+                    lineOffsets.push({ line: startLine, delta: lineDelta });
+                }
+            }
+
+            if (
+                contentChanges.length === 1 &&
+                contentChanges[0].range.start.line ===
+                    contentChanges[0].range.end.line &&
+                !contentChanges[0].text.includes("\n")
+            ) {
+                const affectedLine = contentChanges[0].range.start.line;
+                const bookmark = sourceBookmarks.find(
+                    (b) => b.lineNumber === affectedLine
+                );
+
+                if (bookmark) {
+                    const newText = document.lineAt(affectedLine).text.trim();
+                    const newContentHash = this.calculateLineHash(newText);
+                    const oldContentHash =
+                        this.bookmarkCache.contentHashCache.get(bookmark.id);
+
+                    const similarity = this.calculateTextSimilarity(
+                        bookmark.lineText,
+                        newText
+                    );
+                    if (similarity >= 0.6) {
+                        bookmark.lineText = newText;
+                        this.bookmarkCache.contentHashCache.set(
+                            bookmark.id,
+                            newContentHash
+                        );
+
+                        if (bookmark.context) {
+                            const newContext = this.getLineContext(
+                                document,
+                                affectedLine
+                            );
+                            bookmark.context.beforeLines =
+                                newContext.beforeLines;
+                            bookmark.context.afterLines = newContext.afterLines;
+                            bookmark.context.occurrenceIndex =
+                                newContext.occurrenceIndex;
+                        }
+
+                        changed = true;
+
+                        if (bookmark.linkedBookmarkId) {
+                            const linkedBookmark = this.bookmarks.get(
+                                bookmark.linkedBookmarkId
+                            );
+                            if (linkedBookmark) {
+                                await this.updateLinkedBookmark(
+                                    bookmark,
+                                    linkedBookmark
+                                );
+                            }
+                        }
+
+                        setTimeout(() => {
+                            this.synchronizeBookmarkToAllChainDocs(bookmark)
+                                .then(() => {
+                                    this.refresh();
+                                    this.reapplyAllBookmarkDecorations();
+                                })
+                                .catch((error) => {
+                                    console.error(
+                                        "Error synchronizing bookmark:",
+                                        error
+                                    );
+                                });
+                        }, 100);
+
+                        return changed;
+                    }
+                }
             }
         }
 
-        const bookmarksToUpdate = sourceBookmarks.filter((bookmark) => {
-            if (bookmark.lineNumber < minChangedLine) {
-                return false;
-            }
-
-            if (bookmark.lineNumber < document.lineCount) {
-                const currentLineText = document
-                    .lineAt(bookmark.lineNumber)
-                    .text.trim();
-
-                if (currentLineText === bookmark.lineText) {
-                    return false;
+        const lineTextMap = new Map<string, number[]>();
+        for (let i = 0; i < document.lineCount; i++) {
+            const line = document.lineAt(i).text.trim();
+            if (line.length > 0) {
+                if (!lineTextMap.has(line)) {
+                    lineTextMap.set(line, []);
                 }
-
-                const similarity = this.calculateTextSimilarity(
-                    bookmark.lineText,
-                    currentLineText
-                );
-
-                if (similarity >= 0.7) {
-                    bookmark.lineText = currentLineText;
-                    this.bookmarkCache.contentHashCache.set(
-                        bookmark.id,
-                        this.calculateLineHash(currentLineText)
-                    );
-
-                    if (bookmark.context) {
-                        const newContext = this.getLineContext(
-                            document,
-                            bookmark.lineNumber
-                        );
-                        bookmark.context.beforeLines = newContext.beforeLines;
-                        bookmark.context.afterLines = newContext.afterLines;
-                        bookmark.context.occurrenceIndex =
-                            newContext.occurrenceIndex;
-                        bookmark.context.relativePosition =
-                            newContext.relativePosition;
-                    }
-
-                    setTimeout(() => {
-                        this.synchronizeBookmarkToAllChainDocs(bookmark)
-                            .then(() => {
-                                this.refresh();
-
-                                this.reapplyAllBookmarkDecorations();
-                            })
-                            .catch((error) => {
-                                console.error(
-                                    "Error synchronizing bookmark position update:",
-                                    error
-                                );
-                            });
-                    }, 0);
-
-                    changed = true;
-
-                    return false;
-                }
-
-                return true;
+                lineTextMap.get(line)!.push(i);
             }
-
-            return true;
-        });
+        }
 
         const foundLineCache = new Map<string, number>();
 
-        const lineTextMap = new Map<string, number[]>();
-
-        for (let i = 0; i < document.lineCount; i++) {
-            const line = document.lineAt(i).text.trim();
-            if (!lineTextMap.has(line)) {
-                lineTextMap.set(line, []);
-            }
-            lineTextMap.get(line)!.push(i);
-        }
-
-        for (const bookmark of bookmarksToUpdate) {
+        for (const bookmark of sourceBookmarks) {
             try {
+                if (contentChanges && contentChanges.length > 0) {
+                    const wasAffected = affectedLines.has(bookmark.lineNumber);
+                    if (
+                        !wasAffected &&
+                        bookmark.lineNumber < document.lineCount
+                    ) {
+                        const currentText = document
+                            .lineAt(bookmark.lineNumber)
+                            .text.trim();
+                        if (currentText === bookmark.lineText) {
+                            continue;
+                        }
+                    }
+                }
+
+                let matchingLineNumber: number | undefined;
                 const cacheKey = bookmark.lineText;
 
-                let matchingLineNumber = foundLineCache.get(cacheKey);
-
-                if (matchingLineNumber === undefined) {
+                if (foundLineCache.has(cacheKey)) {
+                    matchingLineNumber = foundLineCache.get(cacheKey);
+                } else {
                     const matchingLines =
                         lineTextMap.get(bookmark.lineText) || [];
 
@@ -2347,50 +2387,25 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                                 bookmark.context.occurrenceIndex;
                             if (matchingLines.length > targetIndex) {
                                 matchingLineNumber = matchingLines[targetIndex];
+                            } else {
+                                matchingLines.sort((a, b) => {
+                                    const distA = Math.abs(
+                                        a - bookmark.lineNumber
+                                    );
+                                    const distB = Math.abs(
+                                        b - bookmark.lineNumber
+                                    );
+                                    return distA - distB;
+                                });
+                                matchingLineNumber = matchingLines[0];
                             }
-                        }
-
-                        if (matchingLineNumber === undefined) {
-                            matchingLineNumber =
-                                await this.findBestMatchingLine(
-                                    bookmark,
-                                    documentUri
-                                );
-                        }
-                    } else {
-                        const fuzzyMatches: {
-                            lineNumber: number;
-                            similarity: number;
-                        }[] = [];
-
-                        for (let i = 0; i < document.lineCount; i++) {
-                            const line = document.lineAt(i).text.trim();
-                            if (line.length > 0) {
-                                const similarity = this.calculateTextSimilarity(
-                                    bookmark.lineText,
-                                    line
-                                );
-                                if (similarity >= 0.6) {
-                                    fuzzyMatches.push({
-                                        lineNumber: i,
-                                        similarity,
-                                    });
-                                }
-                            }
-                        }
-
-                        fuzzyMatches.sort(
-                            (a, b) => b.similarity - a.similarity
-                        );
-
-                        if (fuzzyMatches.length > 0) {
-                            matchingLineNumber = fuzzyMatches[0].lineNumber;
                         } else {
-                            matchingLineNumber =
-                                await this.findBestMatchingLine(
-                                    bookmark,
-                                    documentUri
-                                );
+                            matchingLines.sort((a, b) => {
+                                const distA = Math.abs(a - bookmark.lineNumber);
+                                const distB = Math.abs(b - bookmark.lineNumber);
+                                return distA - distB;
+                            });
+                            matchingLineNumber = matchingLines[0];
                         }
                     }
 
@@ -2399,25 +2414,22 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                     }
                 }
 
+                if (matchingLineNumber === undefined) {
+                    continue;
+                }
+
                 if (
-                    matchingLineNumber !== undefined &&
                     matchingLineNumber !== bookmark.lineNumber &&
                     matchingLineNumber >= 0 &&
                     matchingLineNumber < document.lineCount
                 ) {
-                    const newText = document
-                        .lineAt(matchingLineNumber)
-                        .text.trim();
-                    const oldLineNumber = bookmark.lineNumber;
-
                     this.removeFromIndices(bookmark);
 
+                    const oldLineNumber = bookmark.lineNumber;
                     bookmark.lineNumber = matchingLineNumber;
-                    bookmark.lineText = newText;
-                    this.bookmarkCache.contentHashCache.set(
-                        bookmark.id,
-                        this.calculateLineHash(newText)
-                    );
+
+                    this.addToIndices(bookmark);
+                    this.updateFileLinkCache(bookmark);
 
                     if (bookmark.context) {
                         const newContext = this.getLineContext(
@@ -2429,18 +2441,15 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                         bookmark.context.occurrenceIndex =
                             newContext.occurrenceIndex;
                         bookmark.context.relativePosition =
-                            newContext.relativePosition;
+                            matchingLineNumber / (document.lineCount || 1);
                     }
 
-                    this.addToIndices(bookmark);
-
-                    this.updateFileLinkCache(bookmark);
+                    changed = true;
 
                     setTimeout(() => {
                         this.synchronizeBookmarkToAllChainDocs(bookmark)
                             .then(() => {
                                 this.refresh();
-
                                 this.reapplyAllBookmarkDecorations();
                             })
                             .catch((error) => {
@@ -2450,17 +2459,215 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                                 );
                             });
                     }, 0);
-
-                    changed = true;
                 }
             } catch (error) {
-                console.error("Error updating bookmark position:", error);
+                console.error(
+                    "Error updating bookmark position (exact match):",
+                    error
+                );
+            }
+        }
+
+        const bookmarksNeedingFuzzyMatch = sourceBookmarks.filter(
+            (bookmark) => {
+                const exactMatches = lineTextMap.get(bookmark.lineText) || [];
+                return exactMatches.length === 0;
+            }
+        );
+
+        if (bookmarksNeedingFuzzyMatch.length > 0) {
+            for (const bookmark of bookmarksNeedingFuzzyMatch) {
+                try {
+                    if (bookmark.lineNumber < document.lineCount) {
+                        const currentLineText = document
+                            .lineAt(bookmark.lineNumber)
+                            .text.trim();
+                        const similarity = this.calculateTextSimilarity(
+                            bookmark.lineText,
+                            currentLineText
+                        );
+
+                        if (similarity >= 0.7) {
+                            bookmark.lineText = currentLineText;
+                            this.bookmarkCache.contentHashCache.set(
+                                bookmark.id,
+                                this.calculateLineHash(currentLineText)
+                            );
+
+                            if (bookmark.context) {
+                                const newContext = this.getLineContext(
+                                    document,
+                                    bookmark.lineNumber
+                                );
+                                bookmark.context.beforeLines =
+                                    newContext.beforeLines;
+                                bookmark.context.afterLines =
+                                    newContext.afterLines;
+                                bookmark.context.occurrenceIndex =
+                                    newContext.occurrenceIndex;
+                                bookmark.context.relativePosition =
+                                    newContext.relativePosition;
+                            }
+
+                            changed = true;
+                            continue;
+                        }
+                    }
+
+                    const fuzzyMatches: {
+                        lineNumber: number;
+                        similarity: number;
+                    }[] = [];
+
+                    const isLargeDocument = document.lineCount > 1000;
+                    const searchStart = isLargeDocument
+                        ? Math.max(0, bookmark.lineNumber - 100)
+                        : 0;
+                    const searchEnd = isLargeDocument
+                        ? Math.min(
+                              document.lineCount - 1,
+                              bookmark.lineNumber + 100
+                          )
+                        : document.lineCount - 1;
+
+                    for (let i = searchStart; i <= searchEnd; i++) {
+                        const line = document.lineAt(i).text.trim();
+                        if (line.length > 0) {
+                            const containsCommonKeywords =
+                                this.hasCommonKeywords(bookmark.lineText, line);
+
+                            if (containsCommonKeywords) {
+                                const similarity = this.calculateTextSimilarity(
+                                    bookmark.lineText,
+                                    line
+                                );
+                                if (similarity >= 0.6) {
+                                    const proximityBonus =
+                                        1 -
+                                        (Math.abs(i - bookmark.lineNumber) /
+                                            (document.lineCount || 1)) *
+                                            0.2;
+                                    const adjustedSimilarity =
+                                        similarity * proximityBonus;
+
+                                    fuzzyMatches.push({
+                                        lineNumber: i,
+                                        similarity: adjustedSimilarity,
+                                    });
+                                }
+                            }
+                        }
+                    }
+
+                    if (fuzzyMatches.length > 0) {
+                        fuzzyMatches.sort(
+                            (a, b) => b.similarity - a.similarity
+                        );
+                        const bestMatch = fuzzyMatches[0];
+
+                        if (bestMatch.lineNumber !== bookmark.lineNumber) {
+                            const newText = document
+                                .lineAt(bestMatch.lineNumber)
+                                .text.trim();
+
+                            this.removeFromIndices(bookmark);
+                            bookmark.lineNumber = bestMatch.lineNumber;
+                            bookmark.lineText = newText;
+                            this.bookmarkCache.contentHashCache.set(
+                                bookmark.id,
+                                this.calculateLineHash(newText)
+                            );
+                            this.addToIndices(bookmark);
+
+                            if (bookmark.context) {
+                                const newContext = this.getLineContext(
+                                    document,
+                                    bestMatch.lineNumber
+                                );
+                                bookmark.context.beforeLines =
+                                    newContext.beforeLines;
+                                bookmark.context.afterLines =
+                                    newContext.afterLines;
+                                bookmark.context.occurrenceIndex =
+                                    newContext.occurrenceIndex;
+                                bookmark.context.relativePosition =
+                                    bestMatch.lineNumber /
+                                    (document.lineCount || 1);
+                            }
+
+                            this.updateFileLinkCache(bookmark);
+
+                            changed = true;
+
+                            setTimeout(() => {
+                                this.synchronizeBookmarkToAllChainDocs(
+                                    bookmark
+                                ).catch((error) =>
+                                    console.error(
+                                        "Error synchronizing bookmark:",
+                                        error
+                                    )
+                                );
+                            }, 0);
+                        }
+                    } else if (bookmark.lineNumber >= document.lineCount) {
+                        const matchingLineNumber =
+                            await this.findBestMatchingLine(
+                                bookmark,
+                                documentUri
+                            );
+
+                        if (
+                            matchingLineNumber !== undefined &&
+                            matchingLineNumber >= 0 &&
+                            matchingLineNumber < document.lineCount
+                        ) {
+                            const newText = document
+                                .lineAt(matchingLineNumber)
+                                .text.trim();
+
+                            this.removeFromIndices(bookmark);
+                            bookmark.lineNumber = matchingLineNumber;
+                            bookmark.lineText = newText;
+                            this.bookmarkCache.contentHashCache.set(
+                                bookmark.id,
+                                this.calculateLineHash(newText)
+                            );
+                            this.addToIndices(bookmark);
+
+                            if (bookmark.context) {
+                                const newContext = this.getLineContext(
+                                    document,
+                                    matchingLineNumber
+                                );
+                                bookmark.context.beforeLines =
+                                    newContext.beforeLines;
+                                bookmark.context.afterLines =
+                                    newContext.afterLines;
+                                bookmark.context.occurrenceIndex =
+                                    newContext.occurrenceIndex;
+                                bookmark.context.relativePosition =
+                                    matchingLineNumber /
+                                    (document.lineCount || 1);
+                            }
+
+                            this.updateFileLinkCache(bookmark);
+
+                            changed = true;
+                        }
+                    }
+                } catch (error) {
+                    console.error(
+                        "Error updating bookmark position (fuzzy match):",
+                        error
+                    );
+                }
             }
         }
 
         if (changed) {
             setTimeout(async () => {
-                for (const bookmark of bookmarksToUpdate) {
+                for (const bookmark of sourceBookmarks) {
                     if (bookmark.linkedBookmarkId) {
                         const linkedBookmark = this.bookmarks.get(
                             bookmark.linkedBookmarkId
@@ -2479,5 +2686,63 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
         }
 
         return changed;
+    }
+
+    private hasCommonKeywords(text1: string, text2: string): boolean {
+        if (!text1 || !text2) {
+            return false;
+        }
+
+        if (text1.length < 3 || text2.length < 3) {
+            return true;
+        }
+
+        if (text1.length > 100 && text2.length > 100) {
+            if (text1.substring(0, 10) === text2.substring(0, 10)) {
+                return true;
+            }
+            if (
+                text1.substring(text1.length - 10) ===
+                text2.substring(text2.length - 10)
+            ) {
+                return true;
+            }
+        }
+
+        const words1 = text1
+            .toLowerCase()
+            .replace(/[^\w\s]/g, "")
+            .split(/\s+/)
+            .filter((w) => w.length > 2);
+        const words2 = text2
+            .toLowerCase()
+            .replace(/[^\w\s]/g, "")
+            .split(/\s+/)
+            .filter((w) => w.length > 2);
+
+        if (words1.length === 0 || words2.length === 0) {
+            return true;
+        }
+
+        const set1 = new Set(words1);
+
+        for (const word of words2) {
+            if (set1.has(word)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // Dodanie debugowania dla śledzenia problemów z zakładkami
+    private logBookmarkDebug(message: string, ...args: any[]): void {
+        if (
+            vscode.workspace
+                .getConfiguration("chainGrep")
+                .get<boolean>("debug", false)
+        ) {
+            console.log(`[Bookmark Debug] ${message}`, ...args);
+        }
     }
 }

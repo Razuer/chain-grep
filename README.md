@@ -1,6 +1,6 @@
 # CHAIN GREP
 
-![Chain Grep Icon](icons/icon.png)
+![Chain Grep Icon](icons/Logo.png)
 
 **Chain Grep** is a Visual Studio Code extension that lets you build and execute a sequence of chained text or regex searches on any source file. You can progressively refine your search results, refresh them when the file changes, and highlight text or other snippets. This makes it perfect for searching logs, debugging output, or any other text files. The extension provides an intuitive search interface with clear visual indication of search modes and options. In addition, you can quickly grep selected text using a custom keybinding.
 
@@ -215,3 +215,17 @@ Contributions, issues, and feature requests are welcome! Please feel free to for
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
+
+## Remote Development Support
+
+Chain Grep now fully supports Remote Development scenarios!
+
+When you connect to a remote location like Docker Container, SSH or WSL, the extension will be available and ready to use.
+
+To enable bookmarks synchronization between local and remote environments:
+
+1. Open settings and enable `Chain Grep: Save Bookmarks In Project`
+2. This will store your bookmarks in the `.vscode/chain-grep-bookmarks.json` file in your project
+3. Bookmarks will now be available whether you're working locally or remotely
+
+This ensures that bookmarks saved locally will be available when connected remotely, and you'll be able to navigate and update them just as if you were working locally.

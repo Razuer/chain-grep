@@ -3,7 +3,7 @@
     "name": "chain-grep",
     "displayName": "Chain Grep",
     "description": "Chain Grep enables chained text/regex searches, text highlighting and bookmarks in VS Code.",
-    "icon": "icons/icon.png",
+    "icon": "icons/Logo.png",
     "version": "0.2.0",
     "engines": {
         "vscode": "^1.85.2"
@@ -150,7 +150,7 @@
                 {
                     "id": "chainGrepViewContainer",
                     "title": "Chain Grep",
-                    "icon": "icons/chain-grep-icon.svg"
+                    "icon": "icons/Logo.svg"
                 }
             ]
         },
@@ -159,7 +159,7 @@
                 {
                     "id": "chainGrepView",
                     "name": "Chain Results",
-                    "icon": "icons/chain-grep-icon.svg",
+                    "icon": "icons/Logo.svg",
                     "when": "true"
                 },
                 {
@@ -358,6 +358,16 @@
                     "type": "boolean",
                     "default": true,
                     "description": "Show bookmark labels at the end of bookmarked lines. When disabled, labels will still be stored but not displayed."
+                },
+                "chainGrep.saveBookmarksInProject": {
+                    "type": "boolean",
+                    "default": false,
+                    "markdownDescription": "Save bookmarks in project folder instead of user settings. Creates a .vscode/chain-grep-bookmarks.json file.\n\n*Note: Enables bookmark sharing between local and remote workspaces.*"
+                },
+                "chainGrep.cleanupOrphanedResources": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable cleanup of orphaned resources."
                 }
             }
         }
