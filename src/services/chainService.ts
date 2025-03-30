@@ -497,7 +497,7 @@ export function revealChainNode(
         try {
             chainTreeView.reveal(nodeToReveal, {
                 select: true,
-                focus: false,
+                focus: true,
                 expand: true,
             });
         } catch (error) {

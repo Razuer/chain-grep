@@ -71,7 +71,7 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                 if (node) {
                     this.chainGrepTreeView.reveal(node, {
                         select: true,
-                        focus: false,
+                        focus: true,
                         expand: true,
                     });
                 }
@@ -80,7 +80,7 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                 if (rootNode) {
                     this.chainGrepTreeView.reveal(rootNode, {
                         select: true,
-                        focus: false,
+                        focus: true,
                         expand: true,
                     });
                 }
