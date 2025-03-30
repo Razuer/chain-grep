@@ -38,10 +38,7 @@ import {
     clearCurrentDocumentBookmarks,
 } from "./services/bookmarkService";
 import { getSelectedTextOrWord } from "./utils/utils";
-import {
-    showQueryAndOptionsQuickInput,
-    processRegexInput,
-} from "./services/uiService";
+import { showQueryAndOptionsQuickInput, processRegexInput } from "./services/uiService";
 import {
     getChainForEditor,
     executeChainSearchAndDisplayResults,
@@ -80,18 +77,11 @@ function debouncedSaveState() {
 export async function activate(context: vscode.ExtensionContext) {
     setContext(context);
 
-    const chainGrepFs = new ChainGrepFSProvider(
-        chainGrepContents,
-        chainGrepMap
-    );
+    const chainGrepFs = new ChainGrepFSProvider(chainGrepContents, chainGrepMap);
     context.subscriptions.push(
-        vscode.workspace.registerFileSystemProvider(
-            CHAIN_GREP_SCHEME,
-            chainGrepFs,
-            {
-                isReadonly: false,
-            }
-        )
+        vscode.workspace.registerFileSystemProvider(CHAIN_GREP_SCHEME, chainGrepFs, {
+            isReadonly: false,
+        })
     );
 
     initHighlightDecorations();
@@ -100,11 +90,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     chainGrepFs.markInitialized();
 
-    vscode.commands.executeCommand(
-        "setContext",
-        "editorIsOpen",
-        !!vscode.window.activeTextEditor
-    );
+    vscode.commands.executeCommand("setContext", "editorIsOpen", !!vscode.window.activeTextEditor);
 
     setTimeout(() => {
         applyHighlightsToOpenEditors(chainGrepMap);
@@ -116,13 +102,10 @@ export async function activate(context: vscode.ExtensionContext) {
         showCollapseAll: true,
     });
 
-    const bookmarkTreeView = vscode.window.createTreeView(
-        "chainGrepBookmarks",
-        {
-            treeDataProvider: bookmarkProvider,
-            showCollapseAll: true,
-        }
-    );
+    const bookmarkTreeView = vscode.window.createTreeView("chainGrepBookmarks", {
+        treeDataProvider: bookmarkProvider,
+        showCollapseAll: true,
+    });
 
     bookmarkProvider.setTreeView(bookmarkTreeView);
     bookmarkProvider.setChainGrepTree(chainGrepProvider, chainTreeView);
@@ -141,126 +124,77 @@ export async function activate(context: vscode.ExtensionContext) {
     const intervalMs = getCleanupInterval();
 
     if (intervalMs > 0) {
-        cleanupInterval = setInterval(
-            () => cleanupUnusedResources(false),
-            intervalMs
-        );
-        showStatusMessage(
-            `ChainGrep: Scheduled cleanup every ${intervalMs / 60000} minutes`,
-            1500
-        );
+        cleanupInterval = setInterval(() => cleanupUnusedResources(false), intervalMs);
+        showStatusMessage(`ChainGrep: Scheduled cleanup every ${intervalMs / 60000} minutes`, 1500);
     } else {
         showStatusMessage(`ChainGrep: Automatic cleanup disabled`, 1500);
     }
 
-    const openNodeCmd = vscode.commands.registerCommand(
-        "_chainGrep.openNode",
-        (node: ChainGrepNode) => {
-            openNode(node, chainTreeView);
-        }
-    );
+    const openNodeCmd = vscode.commands.registerCommand("_chainGrep.openNode", (node: ChainGrepNode) => {
+        openNode(node, chainTreeView);
+    });
 
-    const closeNodeCmd = vscode.commands.registerCommand(
-        "_chainGrep.closeNode",
-        (node: ChainGrepNode) => {
-            closeNode(node, chainGrepProvider, bookmarkProvider);
-        }
-    );
+    const closeNodeCmd = vscode.commands.registerCommand("_chainGrep.closeNode", (node: ChainGrepNode) => {
+        closeNode(node, chainGrepProvider, bookmarkProvider);
+    });
 
     const refreshAndOpenCmd = vscode.commands.registerCommand(
         "_chainGrep.refreshAndOpenNode",
         (node: ChainGrepNode) => {
-            refreshAndOpenNode(
-                node,
-                chainGrepProvider,
-                bookmarkProvider,
-                chainTreeView
-            );
+            refreshAndOpenNode(node, chainGrepProvider, bookmarkProvider, chainTreeView);
         }
     );
 
-    const closeAllNodesCmd = vscode.commands.registerCommand(
-        "chainGrep.closeAllNodes",
-        () => closeAllNodes(chainGrepProvider, bookmarkProvider)
+    const closeAllNodesCmd = vscode.commands.registerCommand("chainGrep.closeAllNodes", () =>
+        closeAllNodes(chainGrepProvider, bookmarkProvider)
     );
 
-    const addBookmarkCmd = vscode.commands.registerCommand(
-        "chainGrep.addBookmark",
-        async () => {
-            await addBookmarkAtCurrentLine(bookmarkProvider);
-            savePersistentState();
-        }
-    );
+    const addBookmarkCmd = vscode.commands.registerCommand("chainGrep.addBookmark", async () => {
+        await addBookmarkAtCurrentLine(bookmarkProvider);
+        savePersistentState();
+    });
 
-    const openBookmarkCmd = vscode.commands.registerCommand(
-        "_chainGrep.openBookmark",
-        (node: BookmarkNode) => {
-            bookmarkProvider.openBookmark(node);
-        }
-    );
+    const openBookmarkCmd = vscode.commands.registerCommand("_chainGrep.openBookmark", (node: BookmarkNode) => {
+        bookmarkProvider.openBookmark(node);
+    });
 
-    const removeBookmarkCmd = vscode.commands.registerCommand(
-        "_chainGrep.removeBookmark",
-        (node: BookmarkNode) => {
-            bookmarkProvider.removeBookmarkWithRelated(node.bookmark.id);
-            debouncedSaveState();
-            vscode.window.showInformationMessage(
-                "Bookmark and related references removed."
-            );
-        }
-    );
+    const removeBookmarkCmd = vscode.commands.registerCommand("_chainGrep.removeBookmark", (node: BookmarkNode) => {
+        bookmarkProvider.removeBookmarkWithRelated(node.bookmark.id);
+        debouncedSaveState();
+        vscode.window.showInformationMessage("Bookmark and related references removed.");
+    });
 
-    const clearBookmarksCmd = vscode.commands.registerCommand(
-        "chainGrep.clearBookmarks",
-        () => {
-            bookmarkProvider.clearAllBookmarks();
-            savePersistentState();
-            vscode.window.showInformationMessage(
-                "Cleared all bookmarks from all files."
-            );
-        }
-    );
+    const clearBookmarksCmd = vscode.commands.registerCommand("chainGrep.clearBookmarks", () => {
+        bookmarkProvider.clearAllBookmarks();
+        savePersistentState();
+        vscode.window.showInformationMessage("Cleared all bookmarks from all files.");
+    });
 
-    const clearCurrentDocBookmarksCmd = vscode.commands.registerCommand(
-        "chainGrep.clearCurrentDocBookmarks",
-        () => {
-            clearCurrentDocumentBookmarks(bookmarkProvider);
-            savePersistentState();
-        }
-    );
+    const clearCurrentDocBookmarksCmd = vscode.commands.registerCommand("chainGrep.clearCurrentDocBookmarks", () => {
+        clearCurrentDocumentBookmarks(bookmarkProvider);
+        savePersistentState();
+    });
 
-    const clearAllLocalHighlightsCmd = vscode.commands.registerCommand(
-        "chainGrep.clearAllLocalHighlights",
-        () => {
-            clearAllLocalHighlights(chainGrepMap);
-            savePersistentState();
-        }
-    );
+    const clearAllLocalHighlightsCmd = vscode.commands.registerCommand("chainGrep.clearAllLocalHighlights", () => {
+        clearAllLocalHighlights(chainGrepMap);
+        savePersistentState();
+    });
 
-    const clearAllGlobalHighlightsCmd = vscode.commands.registerCommand(
-        "_chainGrep.clearAllGlobalHighlights",
-        () => {
-            clearHighlightsGlobal(true);
-            savePersistentState();
-        }
-    );
+    const clearAllGlobalHighlightsCmd = vscode.commands.registerCommand("_chainGrep.clearAllGlobalHighlights", () => {
+        clearHighlightsGlobal(true);
+        savePersistentState();
+    });
 
-    const toggleHighlightCmd = vscode.commands.registerTextEditorCommand(
-        "chainGrep.toggleHighlight",
-        (editor) => {
-            const text = getSelectedTextOrWord(editor);
-            toggleHighlightLocal(editor, text, chainGrepMap);
-            savePersistentState();
-        }
-    );
+    const toggleHighlightCmd = vscode.commands.registerTextEditorCommand("chainGrep.toggleHighlight", (editor) => {
+        const text = getSelectedTextOrWord(editor);
+        toggleHighlightLocal(editor, text, chainGrepMap);
+        savePersistentState();
+    });
 
-    const clearHighlightsCmd = vscode.commands.registerTextEditorCommand(
-        "chainGrep.clearHighlights",
-        (editor) => {
-            clearHighlightsLocal(editor, chainGrepMap);
-            savePersistentState();
-        }
-    );
+    const clearHighlightsCmd = vscode.commands.registerTextEditorCommand("chainGrep.clearHighlights", (editor) => {
+        clearHighlightsLocal(editor, chainGrepMap);
+        savePersistentState();
+    });
 
     const toggleHighlightGlobalCmd = vscode.commands.registerTextEditorCommand(
         "chainGrep.toggleHighlightGlobal",
@@ -279,181 +213,142 @@ export async function activate(context: vscode.ExtensionContext) {
         }
     );
 
-    const grepTextCmd = vscode.commands.registerTextEditorCommand(
-        "chainGrep.grepText",
-        async (editor) => {
-            const input = await showQueryAndOptionsQuickInput(
-                undefined,
-                "text"
-            );
-            if (!input?.query) {
-                return;
-            }
-
-            const inverted = input.options.includes("Invert");
-            const caseSensitive = input.options.includes("Case Sensitive");
-            const { chain, sourceUri } = getChainForEditor(editor);
-
-            const newQuery: ChainGrepQuery = {
-                type: "text",
-                query: input.query,
-                inverted,
-                caseSensitive,
-            };
-            const newChain = [...chain, newQuery];
-
-            const docUri = editor.document.uri.toString();
-            let parentDocUri: string | undefined;
-            if (chainGrepMap.has(docUri)) {
-                parentDocUri = docUri;
-            }
-
-            await executeChainSearchAndDisplayResults(
-                sourceUri,
-                newChain,
-                parentDocUri,
-                input.query,
-                chainGrepProvider,
-                bookmarkProvider
-            );
+    const grepTextCmd = vscode.commands.registerTextEditorCommand("chainGrep.grepText", async (editor) => {
+        const input = await showQueryAndOptionsQuickInput(undefined, "text");
+        if (!input?.query) {
+            return;
         }
-    );
 
-    const grepRegexCmd = vscode.commands.registerTextEditorCommand(
-        "chainGrep.grepRegex",
-        async (editor) => {
-            const input = await showQueryAndOptionsQuickInput(
-                undefined,
-                "regex"
-            );
-            if (!input?.query) {
-                return;
-            }
+        const inverted = input.options.includes("Invert");
+        const caseSensitive = input.options.includes("Case Sensitive");
+        const { chain, sourceUri } = getChainForEditor(editor);
 
-            const inverted = input.options.includes("Invert");
-            const caseSensitive = input.options.includes("Case Sensitive");
+        const newQuery: ChainGrepQuery = {
+            type: "text",
+            query: input.query,
+            inverted,
+            caseSensitive,
+        };
+        const newChain = [...chain, newQuery];
 
-            const processedRegex = processRegexInput(input.query);
-            if (!processedRegex) {
-                return;
-            }
-
-            const { pattern, flags } = processedRegex;
-            const { chain, sourceUri } = getChainForEditor(editor);
-            const newQuery: ChainGrepQuery = {
-                type: "regex",
-                query: pattern,
-                flags,
-                inverted,
-                caseSensitive,
-            };
-            const newChain = [...chain, newQuery];
-
-            const docUri = editor.document.uri.toString();
-            let parentDocUri: string | undefined;
-            if (chainGrepMap.has(docUri)) {
-                parentDocUri = docUri;
-            }
-
-            await executeChainSearchAndDisplayResults(
-                sourceUri,
-                newChain,
-                parentDocUri,
-                input.query,
-                chainGrepProvider,
-                bookmarkProvider
-            );
+        const docUri = editor.document.uri.toString();
+        let parentDocUri: string | undefined;
+        if (chainGrepMap.has(docUri)) {
+            parentDocUri = docUri;
         }
-    );
 
-    const grepSelectionCmd = vscode.commands.registerTextEditorCommand(
-        "chainGrep.grepSelection",
-        async (editor) => {
-            const selText = editor.document.getText(editor.selection).trim();
-            const input = await showQueryAndOptionsQuickInput(
-                selText || "",
-                "text"
-            );
-            if (!input?.query) {
-                return;
-            }
+        await executeChainSearchAndDisplayResults(
+            sourceUri,
+            newChain,
+            parentDocUri,
+            input.query,
+            chainGrepProvider,
+            bookmarkProvider
+        );
+    });
 
-            const inverted = input.options.includes("Invert");
-            const caseSensitive = input.options.includes("Case Sensitive");
-            const { chain, sourceUri } = getChainForEditor(editor);
-
-            const newQuery: ChainGrepQuery = {
-                type: "text",
-                query: input.query,
-                inverted,
-                caseSensitive,
-            };
-            const newChain = [...chain, newQuery];
-
-            const docUri = editor.document.uri.toString();
-            let parentDocUri: string | undefined;
-            if (chainGrepMap.has(docUri)) {
-                parentDocUri = docUri;
-            }
-
-            await executeChainSearchAndDisplayResults(
-                sourceUri,
-                newChain,
-                parentDocUri,
-                input.query,
-                chainGrepProvider,
-                bookmarkProvider
-            );
+    const grepRegexCmd = vscode.commands.registerTextEditorCommand("chainGrep.grepRegex", async (editor) => {
+        const input = await showQueryAndOptionsQuickInput(undefined, "regex");
+        if (!input?.query) {
+            return;
         }
-    );
 
-    const refreshChainCmd = vscode.commands.registerTextEditorCommand(
-        "chainGrep.refresh",
-        async (chainEditor) => {
-            const chainDocUri = chainEditor.document.uri;
-            const docUriStr = chainDocUri.toString();
-            if (!chainGrepMap.has(docUriStr)) {
-                vscode.window.showInformationMessage(
-                    "No chain grep found for this document."
-                );
-                return;
-            }
-            const chainInfo = chainGrepMap.get(docUriStr)!;
-            const sourceUri = chainInfo.sourceUri;
-            try {
-                const sourceDoc = await vscode.workspace.openTextDocument(
-                    sourceUri
-                );
-                await vscode.window.showTextDocument(sourceDoc, {
-                    preview: false,
-                });
+        const inverted = input.options.includes("Invert");
+        const caseSensitive = input.options.includes("Case Sensitive");
 
-                await vscode.commands.executeCommand(
-                    "workbench.action.files.revert"
-                );
-
-                const chainDoc = await vscode.workspace.openTextDocument(
-                    chainDocUri
-                );
-                const newChainEditor = await vscode.window.showTextDocument(
-                    chainDoc,
-                    {
-                        preview: false,
-                    }
-                );
-                await executeChainSearchAndUpdateEditor(
-                    sourceUri,
-                    chainInfo.chain,
-                    newChainEditor,
-                    bookmarkProvider
-                );
-            } catch {
-                vscode.window.showInformationMessage(
-                    "Unable to refresh the source document."
-                );
-            }
+        const processedRegex = processRegexInput(input.query);
+        if (!processedRegex) {
+            return;
         }
-    );
+
+        const { pattern, flags } = processedRegex;
+        const { chain, sourceUri } = getChainForEditor(editor);
+        const newQuery: ChainGrepQuery = {
+            type: "regex",
+            query: pattern,
+            flags,
+            inverted,
+            caseSensitive,
+        };
+        const newChain = [...chain, newQuery];
+
+        const docUri = editor.document.uri.toString();
+        let parentDocUri: string | undefined;
+        if (chainGrepMap.has(docUri)) {
+            parentDocUri = docUri;
+        }
+
+        await executeChainSearchAndDisplayResults(
+            sourceUri,
+            newChain,
+            parentDocUri,
+            input.query,
+            chainGrepProvider,
+            bookmarkProvider
+        );
+    });
+
+    const grepSelectionCmd = vscode.commands.registerTextEditorCommand("chainGrep.grepSelection", async (editor) => {
+        const selText = editor.document.getText(editor.selection).trim();
+        const input = await showQueryAndOptionsQuickInput(selText || "", "text");
+        if (!input?.query) {
+            return;
+        }
+
+        const inverted = input.options.includes("Invert");
+        const caseSensitive = input.options.includes("Case Sensitive");
+        const { chain, sourceUri } = getChainForEditor(editor);
+
+        const newQuery: ChainGrepQuery = {
+            type: "text",
+            query: input.query,
+            inverted,
+            caseSensitive,
+        };
+        const newChain = [...chain, newQuery];
+
+        const docUri = editor.document.uri.toString();
+        let parentDocUri: string | undefined;
+        if (chainGrepMap.has(docUri)) {
+            parentDocUri = docUri;
+        }
+
+        await executeChainSearchAndDisplayResults(
+            sourceUri,
+            newChain,
+            parentDocUri,
+            input.query,
+            chainGrepProvider,
+            bookmarkProvider
+        );
+    });
+
+    const refreshChainCmd = vscode.commands.registerTextEditorCommand("chainGrep.refresh", async (chainEditor) => {
+        const chainDocUri = chainEditor.document.uri;
+        const docUriStr = chainDocUri.toString();
+        if (!chainGrepMap.has(docUriStr)) {
+            vscode.window.showInformationMessage("No chain grep found for this document.");
+            return;
+        }
+        const chainInfo = chainGrepMap.get(docUriStr)!;
+        const sourceUri = chainInfo.sourceUri;
+        try {
+            const sourceDoc = await vscode.workspace.openTextDocument(sourceUri);
+            await vscode.window.showTextDocument(sourceDoc, {
+                preview: false,
+            });
+
+            await vscode.commands.executeCommand("workbench.action.files.revert");
+
+            const chainDoc = await vscode.workspace.openTextDocument(chainDocUri);
+            const newChainEditor = await vscode.window.showTextDocument(chainDoc, {
+                preview: false,
+            });
+            await executeChainSearchAndUpdateEditor(sourceUri, chainInfo.chain, newChainEditor, bookmarkProvider);
+        } catch {
+            vscode.window.showInformationMessage("Unable to refresh the source document.");
+        }
+    });
 
     const closeDocHandler = vscode.workspace.onDidCloseTextDocument((doc) => {
         const docUri = doc.uri;
@@ -468,9 +363,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
             if (inContents) {
                 chainGrepContents.delete(uriString);
-                console.log(
-                    `ChainGrep: Content deleted from chainGrepContents, but chain info preserved`
-                );
+                console.log(`ChainGrep: Content deleted from chainGrepContents, but chain info preserved`);
                 savePersistentState();
             }
         }
@@ -483,21 +376,15 @@ export async function activate(context: vscode.ExtensionContext) {
 
                 if (uri.scheme === CHAIN_GREP_SCHEME) {
                     const uriString = uri.toString();
-                    console.log(
-                        `ChainGrep: Tab closed for document: ${uriString}`
-                    );
+                    console.log(`ChainGrep: Tab closed for document: ${uriString}`);
 
                     const inContents = chainGrepContents.has(uriString);
 
-                    console.log(
-                        `ChainGrep: File exists in contents: ${inContents}`
-                    );
+                    console.log(`ChainGrep: File exists in contents: ${inContents}`);
 
                     if (inContents) {
                         chainGrepContents.delete(uriString);
-                        console.log(
-                            `ChainGrep: Content deleted from chainGrepContents, chain info preserved`
-                        );
+                        console.log(`ChainGrep: Content deleted from chainGrepContents, chain info preserved`);
                         savePersistentState();
                     }
                 }
@@ -505,12 +392,9 @@ export async function activate(context: vscode.ExtensionContext) {
         }
     });
 
-    const forceCleanupCmd = vscode.commands.registerCommand(
-        "chainGrep.forceCleanup",
-        async () => {
-            cleanupUnusedResources(true);
-        }
-    );
+    const forceCleanupCmd = vscode.commands.registerCommand("chainGrep.forceCleanup", async () => {
+        cleanupUnusedResources(true);
+    });
 
     const removeFileBookmarksCommand = vscode.commands.registerCommand(
         "_chainGrep.removeFileBookmarks",
@@ -541,25 +425,15 @@ export async function activate(context: vscode.ExtensionContext) {
 
                 const docUri = editor.document.uri.toString();
                 if (docUri.startsWith("chaingrep:")) {
-                    vscode.commands.executeCommand(
-                        "workbench.view.extension.chainGrepViewContainer"
-                    );
+                    vscode.commands.executeCommand("workbench.view.extension.chainGrepViewContainer");
                     revealChainNode(docUri, chainTreeView, chainGrepProvider);
                 } else if (chainTreeView?.visible) {
                     revealChainNode(docUri, chainTreeView, chainGrepProvider);
                 }
 
-                vscode.commands.executeCommand(
-                    "setContext",
-                    "editorIsOpen",
-                    true
-                );
+                vscode.commands.executeCommand("setContext", "editorIsOpen", true);
             } else {
-                vscode.commands.executeCommand(
-                    "setContext",
-                    "editorIsOpen",
-                    false
-                );
+                vscode.commands.executeCommand("setContext", "editorIsOpen", false);
             }
         }),
         vscode.window.onDidChangeTextEditorSelection((event) => {
@@ -571,86 +445,49 @@ export async function activate(context: vscode.ExtensionContext) {
                 let hasBookmark = false;
 
                 if (docUri.startsWith("chaingrep:")) {
-                    hasBookmark = bookmarkProvider.hasBookmarkAtLine(
-                        docUri,
-                        lineNumber
-                    );
+                    hasBookmark = bookmarkProvider.hasBookmarkAtLine(docUri, lineNumber);
                 } else {
-                    hasBookmark = bookmarkProvider.hasSourceBookmarkAtLine(
-                        docUri,
-                        lineNumber
-                    );
+                    hasBookmark = bookmarkProvider.hasSourceBookmarkAtLine(docUri, lineNumber);
 
                     if (!hasBookmark) {
-                        const sourceBookmarks =
-                            bookmarkProvider.getSourceBookmarksAtLine(
-                                docUri,
-                                lineNumber
-                            );
-                        hasBookmark = sourceBookmarks.some(
-                            (b) => b.linkedBookmarkId !== undefined
-                        );
+                        const sourceBookmarks = bookmarkProvider.getSourceBookmarksAtLine(docUri, lineNumber);
+                        hasBookmark = sourceBookmarks.some((b) => b.linkedBookmarkId !== undefined);
                     }
                 }
 
-                vscode.commands.executeCommand(
-                    "setContext",
-                    "editorHasBookmark",
-                    hasBookmark
-                );
+                vscode.commands.executeCommand("setContext", "editorHasBookmark", hasBookmark);
             }
         }),
         vscode.workspace.onDidChangeTextDocument((event) => {
             const activeEditor = vscode.window.activeTextEditor;
             if (activeEditor && event.document === activeEditor.document) {
                 bookmarkProvider
-                    .updateBookmarkPositionsForDocument(
-                        event.document,
-                        event.contentChanges
-                    )
+                    .updateBookmarkPositionsForDocument(event.document, event.contentChanges)
                     .then((changed) => {
                         setTimeout(() => {
                             bookmarkProvider.reapplyAllBookmarkDecorations();
 
                             if (activeEditor) {
-                                const lineNumber =
-                                    activeEditor.selection.active.line;
-                                const docUri =
-                                    activeEditor.document.uri.toString();
+                                const lineNumber = activeEditor.selection.active.line;
+                                const docUri = activeEditor.document.uri.toString();
 
                                 let hasBookmark = false;
 
                                 if (docUri.startsWith("chaingrep:")) {
-                                    hasBookmark =
-                                        bookmarkProvider.hasBookmarkAtLine(
-                                            docUri,
-                                            lineNumber
-                                        );
+                                    hasBookmark = bookmarkProvider.hasBookmarkAtLine(docUri, lineNumber);
                                 } else {
-                                    hasBookmark =
-                                        bookmarkProvider.hasSourceBookmarkAtLine(
-                                            docUri,
-                                            lineNumber
-                                        );
+                                    hasBookmark = bookmarkProvider.hasSourceBookmarkAtLine(docUri, lineNumber);
 
                                     if (!hasBookmark) {
-                                        const sourceBookmarks =
-                                            bookmarkProvider.getSourceBookmarksAtLine(
-                                                docUri,
-                                                lineNumber
-                                            );
-                                        hasBookmark = sourceBookmarks.some(
-                                            (b) =>
-                                                b.linkedBookmarkId !== undefined
+                                        const sourceBookmarks = bookmarkProvider.getSourceBookmarksAtLine(
+                                            docUri,
+                                            lineNumber
                                         );
+                                        hasBookmark = sourceBookmarks.some((b) => b.linkedBookmarkId !== undefined);
                                     }
                                 }
 
-                                vscode.commands.executeCommand(
-                                    "setContext",
-                                    "editorHasBookmark",
-                                    hasBookmark
-                                );
+                                vscode.commands.executeCommand("setContext", "editorHasBookmark", hasBookmark);
                             }
                         }, 100);
 
@@ -659,10 +496,7 @@ export async function activate(context: vscode.ExtensionContext) {
                         }
                     })
                     .catch((error) => {
-                        console.error(
-                            "Error updating bookmark positions:",
-                            error
-                        );
+                        console.error("Error updating bookmark positions:", error);
                     });
             }
         }),
@@ -679,9 +513,7 @@ export async function activate(context: vscode.ExtensionContext) {
         grepRegexCmd,
         grepSelectionCmd,
         refreshChainCmd,
-        cleanupInterval
-            ? new vscode.Disposable(() => clearInterval(cleanupInterval))
-            : new vscode.Disposable(() => {}),
+        cleanupInterval ? new vscode.Disposable(() => clearInterval(cleanupInterval)) : new vscode.Disposable(() => {}),
         closeDocHandler,
         tabCloseListener,
         closeAllNodesCmd,

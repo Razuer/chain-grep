@@ -24,9 +24,7 @@ const debouncedSavePersistentStateInternal = debounce(async () => {
     const contentsData = Array.from(chainGrepContents.entries());
 
     const persistentHighlights = getHighlightState();
-    const bookmarks = bookmarkProvider
-        ? bookmarkProvider.getAllBookmarks()
-        : [];
+    const bookmarks = bookmarkProvider ? bookmarkProvider.getAllBookmarks() : [];
 
     // Save bookmarks to workspace file if enabled
     const saveToWorkspaceEnabled = isBookmarkSavingInProjectEnabled();
@@ -66,10 +64,7 @@ export function savePersistentState() {
 }
 
 export async function saveBookmarksToWorkspace(bookmarks: Bookmark[]) {
-    if (
-        !vscode.workspace.workspaceFolders ||
-        vscode.workspace.workspaceFolders.length === 0
-    ) {
+    if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
         return false;
     }
 
@@ -77,10 +72,7 @@ export async function saveBookmarksToWorkspace(bookmarks: Bookmark[]) {
         const workspaceFolder = vscode.workspace.workspaceFolders[0];
         // Używamy URI zamiast ścieżek systemowych dla kompatybilności z Remote Development
         const vscodeUri = vscode.Uri.joinPath(workspaceFolder.uri, ".vscode");
-        const fileUri = vscode.Uri.joinPath(
-            vscodeUri,
-            "chain-grep-bookmarks.json"
-        );
+        const fileUri = vscode.Uri.joinPath(vscodeUri, "chain-grep-bookmarks.json");
 
         // Ensure .vscode directory exists
         try {
@@ -97,21 +89,12 @@ export async function saveBookmarksToWorkspace(bookmarks: Bookmark[]) {
 
             // Jeśli mamy sourceUri i jest to absolutna ścieżka, skonwertuj ją na względną
             if (normalizedBookmark.sourceUri) {
-                normalizedBookmark.sourceUri = normalizeUriPath(
-                    normalizedBookmark.sourceUri,
-                    workspaceFolder.uri
-                );
+                normalizedBookmark.sourceUri = normalizeUriPath(normalizedBookmark.sourceUri, workspaceFolder.uri);
             }
 
             // Jeśli mamy docUri i jest to absolutna ścieżka, skonwertuj ją na względną
-            if (
-                normalizedBookmark.docUri &&
-                !normalizedBookmark.docUri.startsWith("chaingrep:")
-            ) {
-                normalizedBookmark.docUri = normalizeUriPath(
-                    normalizedBookmark.docUri,
-                    workspaceFolder.uri
-                );
+            if (normalizedBookmark.docUri && !normalizedBookmark.docUri.startsWith("chaingrep:")) {
+                normalizedBookmark.docUri = normalizeUriPath(normalizedBookmark.docUri, workspaceFolder.uri);
             }
 
             return normalizedBookmark;
@@ -119,10 +102,7 @@ export async function saveBookmarksToWorkspace(bookmarks: Bookmark[]) {
 
         // Save bookmarks to file
         const bookmarksData = JSON.stringify(preparedBookmarks, null, 2);
-        await vscode.workspace.fs.writeFile(
-            fileUri,
-            Buffer.from(bookmarksData, "utf-8")
-        );
+        await vscode.workspace.fs.writeFile(fileUri, Buffer.from(bookmarksData, "utf-8"));
 
         return true;
     } catch (error) {
@@ -132,21 +112,14 @@ export async function saveBookmarksToWorkspace(bookmarks: Bookmark[]) {
 }
 
 export async function loadBookmarksFromWorkspace(): Promise<Bookmark[] | null> {
-    if (
-        !vscode.workspace.workspaceFolders ||
-        vscode.workspace.workspaceFolders.length === 0
-    ) {
+    if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
         return null;
     }
 
     try {
         const workspaceFolder = vscode.workspace.workspaceFolders[0];
         // Używamy URI zamiast ścieżek systemowych dla kompatybilności z Remote Development
-        const fileUri = vscode.Uri.joinPath(
-            workspaceFolder.uri,
-            ".vscode",
-            "chain-grep-bookmarks.json"
-        );
+        const fileUri = vscode.Uri.joinPath(workspaceFolder.uri, ".vscode", "chain-grep-bookmarks.json");
 
         // Try to read the bookmarks file
         try {
@@ -161,14 +134,8 @@ export async function loadBookmarksFromWorkspace(): Promise<Bookmark[] | null> {
                 const restoredBookmark = { ...bookmark };
 
                 // Jeśli mamy sourceUri jako ścieżkę względną, konwertuj ją na absolutną
-                if (
-                    restoredBookmark.sourceUri &&
-                    !restoredBookmark.sourceUri.startsWith("file:")
-                ) {
-                    restoredBookmark.sourceUri = denormalizeUriPath(
-                        restoredBookmark.sourceUri,
-                        workspaceFolder.uri
-                    );
+                if (restoredBookmark.sourceUri && !restoredBookmark.sourceUri.startsWith("file:")) {
+                    restoredBookmark.sourceUri = denormalizeUriPath(restoredBookmark.sourceUri, workspaceFolder.uri);
                 }
 
                 // Jeśli mamy docUri jako ścieżkę względną, konwertuj ją na absolutną
@@ -177,10 +144,7 @@ export async function loadBookmarksFromWorkspace(): Promise<Bookmark[] | null> {
                     !restoredBookmark.docUri.startsWith("chaingrep:") &&
                     !restoredBookmark.docUri.startsWith("file:")
                 ) {
-                    restoredBookmark.docUri = denormalizeUriPath(
-                        restoredBookmark.docUri,
-                        workspaceFolder.uri
-                    );
+                    restoredBookmark.docUri = denormalizeUriPath(restoredBookmark.docUri, workspaceFolder.uri);
                 }
 
                 return restoredBookmark;
@@ -221,10 +185,7 @@ function normalizeUriPath(uriPath: string, workspaceUri: vscode.Uri): string {
 }
 
 // Przekształca względną ścieżkę na absolutne URI w kontekście workspace
-function denormalizeUriPath(
-    relativePath: string,
-    workspaceUri: vscode.Uri
-): string {
+function denormalizeUriPath(relativePath: string, workspaceUri: vscode.Uri): string {
     try {
         // Jeśli to już jest absolutne URI, pozostawiamy bez zmian
         if (relativePath.includes(":")) {
@@ -233,14 +194,9 @@ function denormalizeUriPath(
 
         // Jeśli to ścieżka względna, łączymy ją z workspace URI
         // Upewnij się, że ścieżka ma prawidłowy format (usuń lub dodaj ukośnik początkowy)
-        const normalizedPath = relativePath.startsWith("/")
-            ? relativePath
-            : "/" + relativePath;
+        const normalizedPath = relativePath.startsWith("/") ? relativePath : "/" + relativePath;
 
-        return vscode.Uri.joinPath(
-            workspaceUri,
-            normalizedPath.substring(1)
-        ).toString();
+        return vscode.Uri.joinPath(workspaceUri, normalizedPath.substring(1)).toString();
     } catch (error) {
         console.error("Error denormalizing URI path:", error);
         return relativePath;
@@ -323,17 +279,10 @@ function rebuildTreeViewFromState(chainGrepProvider: ChainGrepDataProvider) {
             let maxMatchLength = 0;
 
             for (const [otherDocUri, otherChain] of docEntries) {
-                if (
-                    otherDocUri !== docUri &&
-                    chain.length > otherChain.length &&
-                    otherChain.length > maxMatchLength
-                ) {
+                if (otherDocUri !== docUri && chain.length > otherChain.length && otherChain.length > maxMatchLength) {
                     let isPrefix = true;
                     for (let i = 0; i < otherChain.length; i++) {
-                        if (
-                            JSON.stringify(otherChain[i]) !==
-                            JSON.stringify(chain[i])
-                        ) {
+                        if (JSON.stringify(otherChain[i]) !== JSON.stringify(chain[i])) {
                             isPrefix = false;
                             break;
                         }
@@ -347,19 +296,9 @@ function rebuildTreeViewFromState(chainGrepProvider: ChainGrepDataProvider) {
             }
 
             if (bestParentDocUri) {
-                chainGrepProvider.addSubChain(
-                    bestParentDocUri,
-                    label,
-                    chain,
-                    docUri
-                );
+                chainGrepProvider.addSubChain(bestParentDocUri, label, chain, docUri);
             } else {
-                chainGrepProvider.addRootChain(
-                    sourceUriStr,
-                    label,
-                    chain,
-                    docUri
-                );
+                chainGrepProvider.addRootChain(sourceUriStr, label, chain, docUri);
             }
         }
     }
@@ -367,28 +306,18 @@ function rebuildTreeViewFromState(chainGrepProvider: ChainGrepDataProvider) {
     chainGrepProvider.refresh();
 }
 
-export function cleanupUnusedResources(
-    showNotifications: boolean = false,
-    isLoggingEnabled: boolean = false
-): number {
-    const visibleUris = vscode.window.visibleTextEditors.map((editor) =>
-        editor.document.uri.toString()
-    );
+export function cleanupUnusedResources(showNotifications: boolean = false, isLoggingEnabled: boolean = false): number {
+    const visibleUris = vscode.window.visibleTextEditors.map((editor) => editor.document.uri.toString());
 
     let cleanedCount = 0;
 
     for (const contentUri of chainGrepContents.keys()) {
-        if (
-            !chainGrepMap.has(contentUri) &&
-            !visibleUris.includes(contentUri)
-        ) {
+        if (!chainGrepMap.has(contentUri) && !visibleUris.includes(contentUri)) {
             chainGrepContents.delete(contentUri);
             cleanedCount++;
 
             if (isLoggingEnabled) {
-                showStatusMessage(
-                    `ChainGrep: Cleaned up orphaned content: ${contentUri}`
-                );
+                showStatusMessage(`ChainGrep: Cleaned up orphaned content: ${contentUri}`);
             }
         }
     }
@@ -397,20 +326,14 @@ export function cleanupUnusedResources(
         savePersistentState();
 
         if (isLoggingEnabled) {
-            showStatusMessage(
-                `ChainGrep: Background cleanup removed ${cleanedCount} orphaned resources`
-            );
+            showStatusMessage(`ChainGrep: Background cleanup removed ${cleanedCount} orphaned resources`);
         }
 
         if (showNotifications) {
-            vscode.window.showInformationMessage(
-                `Chain Grep: Cleaned up ${cleanedCount} orphaned resources`
-            );
+            vscode.window.showInformationMessage(`Chain Grep: Cleaned up ${cleanedCount} orphaned resources`);
         }
     } else if (showNotifications) {
-        vscode.window.showInformationMessage(
-            "Chain Grep: No orphaned resources found"
-        );
+        vscode.window.showInformationMessage("Chain Grep: No orphaned resources found");
     }
 
     return cleanedCount;

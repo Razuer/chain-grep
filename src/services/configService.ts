@@ -66,19 +66,13 @@ let statusBarItem: vscode.StatusBarItem | undefined;
 
 export function getStatusBar(): vscode.StatusBarItem {
     if (!statusBarItem) {
-        statusBarItem = vscode.window.createStatusBarItem(
-            vscode.StatusBarAlignment.Right,
-            100
-        );
+        statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
         statusBarItem.name = "Chain Grep";
     }
     return statusBarItem;
 }
 
-export function showStatusMessage(
-    message: string,
-    timeout: number = 5000
-): void {
+export function showStatusMessage(message: string, timeout: number = 5000): void {
     const statusBar = getStatusBar();
     statusBar.text = `$(sync) ${message}`;
     statusBar.show();
@@ -100,15 +94,11 @@ export function areBookmarkSymbolsEnabled(): boolean {
 }
 
 export function areBookmarkLabelsEnabled(): boolean {
-    return vscode.workspace
-        .getConfiguration("chainGrep")
-        .get<boolean>("bookmarks.showLabels", true);
+    return vscode.workspace.getConfiguration("chainGrep").get<boolean>("bookmarks.showLabels", true);
 }
 
 export function isBookmarkSavingInProjectEnabled(): boolean {
-    return vscode.workspace
-        .getConfiguration("chainGrep")
-        .get<boolean>("saveBookmarksInProject", false);
+    return vscode.workspace.getConfiguration("chainGrep").get<boolean>("saveBookmarksInProject", false);
 }
 
 export function handleConfigChange(
@@ -119,10 +109,7 @@ export function handleConfigChange(
         bookmarkProvider: any;
         cleanupUnusedResources: (force: boolean) => void;
         highlightService?: {
-            resetAllHighlightDecorations: (
-                map: Map<string, any>,
-                reset?: boolean
-            ) => void;
+            resetAllHighlightDecorations: (map: Map<string, any>, reset?: boolean) => void;
             applyHighlightsToOpenEditors: (map: Map<string, any>) => void;
         };
         savePersistentState?: () => void;
@@ -134,15 +121,11 @@ export function handleConfigChange(
     } = {};
 
     const highlightService = params.highlightService || {
-        resetAllHighlightDecorations:
-            require("./highlightService").resetAllHighlightDecorations,
-        applyHighlightsToOpenEditors:
-            require("./highlightService").applyHighlightsToOpenEditors,
+        resetAllHighlightDecorations: require("./highlightService").resetAllHighlightDecorations,
+        applyHighlightsToOpenEditors: require("./highlightService").applyHighlightsToOpenEditors,
     };
 
-    const savePersistentState =
-        params.savePersistentState ||
-        require("./stateService").savePersistentState;
+    const savePersistentState = params.savePersistentState || require("./stateService").savePersistentState;
 
     if (e.affectsConfiguration("chainGrep.system.cleanupInterval")) {
         const intervalMs = getCleanupInterval();
@@ -152,42 +135,25 @@ export function handleConfigChange(
         }
 
         if (intervalMs > 0) {
-            result.cleanupInterval = setInterval(
-                () => params.cleanupUnusedResources(false),
-                intervalMs
-            );
-            showStatusMessage(
-                `ChainGrep: Cleanup interval changed to ${
-                    intervalMs / 60000
-                } minutes`
-            );
+            result.cleanupInterval = setInterval(() => params.cleanupUnusedResources(false), intervalMs);
+            showStatusMessage(`ChainGrep: Cleanup interval changed to ${intervalMs / 60000} minutes`);
         } else {
             showStatusMessage(`ChainGrep: Automatic cleanup disabled`);
         }
     }
 
-    if (
-        e.affectsConfiguration("chainGrep.highlights.showScrollbarIndicators")
-    ) {
+    if (e.affectsConfiguration("chainGrep.highlights.showScrollbarIndicators")) {
         highlightService.resetAllHighlightDecorations(params.chainGrepMap);
         highlightService.applyHighlightsToOpenEditors(params.chainGrepMap);
     }
 
     if (e.affectsConfiguration("chainGrep.highlights.palette")) {
-        console.log(
-            "Chain Grep: Color palette changed, resetting all highlights"
-        );
-        highlightService.resetAllHighlightDecorations(
-            params.chainGrepMap,
-            true
-        );
+        console.log("Chain Grep: Color palette changed, resetting all highlights");
+        highlightService.resetAllHighlightDecorations(params.chainGrepMap, true);
     }
 
     if (e.affectsConfiguration("chainGrep.highlights.randomOrder")) {
-        highlightService.resetAllHighlightDecorations(
-            params.chainGrepMap,
-            true
-        );
+        highlightService.resetAllHighlightDecorations(params.chainGrepMap, true);
     }
 
     if (e.affectsConfiguration("chainGrep.bookmarks.color")) {
@@ -201,19 +167,13 @@ export function handleConfigChange(
         params.bookmarkProvider.updateDecorationStyle();
     }
 
-    if (
-        e.affectsConfiguration("chainGrep.saveBookmarksInProject") &&
-        savePersistentState
-    ) {
+    if (e.affectsConfiguration("chainGrep.saveBookmarksInProject") && savePersistentState) {
         const saveInProject = isBookmarkSavingInProjectEnabled();
 
         savePersistentState();
 
         if (saveInProject) {
-            if (
-                vscode.workspace.workspaceFolders &&
-                vscode.workspace.workspaceFolders.length > 0
-            ) {
+            if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
                 vscode.window.showInformationMessage(
                     "Chain Grep: Bookmarks will now be saved in your project folder, making them available in remote environments."
                 );
@@ -229,9 +189,7 @@ export function handleConfigChange(
 
     if (
         e.affectsConfiguration("chainGrep.highlights.palette") ||
-        e.affectsConfiguration(
-            "chainGrep.highlights.showScrollbarIndicators"
-        ) ||
+        e.affectsConfiguration("chainGrep.highlights.showScrollbarIndicators") ||
         e.affectsConfiguration("chainGrep.highlights.randomOrder") ||
         e.affectsConfiguration("chainGrep.bookmarks.color") ||
         e.affectsConfiguration("chainGrep.bookmarks.showSymbols") ||
