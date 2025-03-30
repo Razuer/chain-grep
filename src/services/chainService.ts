@@ -347,6 +347,9 @@ export async function closeNode(
         if (nodeToRemove.docUri) {
             chainGrepMap.delete(nodeToRemove.docUri);
             chainGrepContents.delete(nodeToRemove.docUri);
+
+            // Remove any bookmarks associated with this document URI
+            bookmarkProv.clearBookmarksFromDocument(nodeToRemove.docUri);
         }
     }
 
@@ -460,6 +463,9 @@ export async function closeAllNodes(chainGrepProvider: ChainGrepDataProvider, bo
             if (nodeToRemove.docUri) {
                 chainGrepMap.delete(nodeToRemove.docUri);
                 chainGrepContents.delete(nodeToRemove.docUri);
+
+                // Remove any bookmarks associated with this document URI
+                bookmarkProv.clearBookmarksFromDocument(nodeToRemove.docUri);
             }
         }
         chainGrepProvider.removeNode(node);
