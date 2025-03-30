@@ -18,15 +18,15 @@ export function areRandomColorsEnabled(): boolean {
 }
 
 export function isDetailedChainDocEnabled(): boolean {
-    return getConfig<boolean>("documents.showDetailedInfo", true);
+    return getConfig<boolean>("chainedDocuments.showDetailedInfo", true);
 }
 
 export function getMaxBaseNameLength(): number {
-    return getConfig<number>("documents.maxBaseNameLength", 70);
+    return getConfig<number>("chainedDocuments.maxBaseNameLength", 70);
 }
 
 export function getMaxChainDescriptorLength(): number {
-    return getConfig<number>("documents.maxChainDescriptorLength", 30);
+    return getConfig<number>("chainedDocuments.maxChainDescriptorLength", 30);
 }
 
 export function getCleanupInterval(): number {
@@ -97,8 +97,8 @@ export function areBookmarkLabelsEnabled(): boolean {
     return vscode.workspace.getConfiguration("chainGrep").get<boolean>("bookmarks.showLabels", true);
 }
 
-export function isBookmarkSavingInProjectEnabled(): boolean {
-    return vscode.workspace.getConfiguration("chainGrep").get<boolean>("saveBookmarksInProject", false);
+export function isStateSavingInProjectEnabled(): boolean {
+    return vscode.workspace.getConfiguration("chainGrep").get<boolean>("system.saveStateInProject", false);
 }
 
 export function handleConfigChange(
@@ -167,20 +167,20 @@ export function handleConfigChange(
         params.bookmarkProvider.updateDecorationStyle();
     }
 
-    if (e.affectsConfiguration("chainGrep.saveBookmarksInProject") && savePersistentState) {
-        const saveInProject = isBookmarkSavingInProjectEnabled();
+    if (e.affectsConfiguration("chainGrep.system.saveStateInProject") && savePersistentState) {
+        const saveInProject = isStateSavingInProjectEnabled();
 
         savePersistentState();
 
         if (saveInProject) {
             if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
                 vscode.window.showInformationMessage(
-                    "Chain Grep: Bookmarks will now be saved in your project folder, making them available in remote environments."
+                    "Chain Grep: Extension state will now be saved in your project folder, making it available in remote environments."
                 );
             }
         } else {
             vscode.window.showInformationMessage(
-                "Chain Grep: Bookmarks will now be saved in VS Code settings, independent of your project folder."
+                "Chain Grep: Extension state will now be saved in VS Code settings, independent of your project folder."
             );
         }
 

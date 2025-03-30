@@ -164,8 +164,8 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.window.showInformationMessage("Bookmark and related references removed.");
     });
 
-    const clearBookmarksCmd = vscode.commands.registerCommand("chainGrep.clearBookmarks", () => {
-        bookmarkProvider.clearAllBookmarks();
+    const clearBookmarksCmd = vscode.commands.registerCommand("chainGrep.clearBookmarks", async () => {
+        await bookmarkProvider.clearAllBookmarks();
         savePersistentState();
         vscode.window.showInformationMessage("Cleared all bookmarks from all files.");
     });

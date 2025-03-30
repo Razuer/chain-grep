@@ -159,10 +159,7 @@ export function generateChainGrepDocUri(sourceUri: vscode.Uri, chain: ChainGrepQ
 
     const docName = `[${truncatedBaseName}] : ${truncatedChainDescriptor}${extension}`;
 
-    const safePath = (docName.startsWith("/") ? "" : "/") + docName.replace(/\\/g, "/");
+    const docUri = vscode.Uri.joinPath(sourceUri, "..", docName).with({ scheme: "chaingrep" });
 
-    return vscode.Uri.from({
-        scheme: "chaingrep",
-        path: safePath,
-    });
+    return docUri;
 }

@@ -4,7 +4,7 @@
     "displayName": "Chain Grep",
     "description": "Chain Grep enables chained text/regex searches, text highlighting and bookmarks in VS Code.",
     "icon": "icons/Logo.png",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "engines": {
         "vscode": "^1.85.2"
     },
@@ -304,25 +304,50 @@
         "configuration": {
             "title": "Chain Grep",
             "properties": {
-                "chainGrep.highlights.palette": {
-                    "type": "string",
-                    "default": "#89CFF0:black, #FF6961:black, #77DD77:black, #C3A8FF:black, #FDFD96:black, #A0E7E5:black, #FFB7CE:black, #CCFF90:black, #B19CD9:black, #FF82A9:black, #A8BFFF:black, #FFDAB9:black, #A8D0FF:black, #FFE680:black, #A8E0FF:black, #FFCBA4:black, #E6A8D7:black, #FFCCD2:black, #ACE1AF:black, #FF99FF:black",
-                    "description": "Comma-separated list of background:foreground color pairs for highlights. Leave empty for default set."
-                },
                 "chainGrep.bookmarks.color": {
                     "type": "string",
                     "default": "#3794FF",
                     "description": "Color for bookmark indicators and backgrounds. Use CSS color format."
+                },
+                "chainGrep.bookmarks.showLabels": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Show bookmark labels at the end of bookmarked lines. When disabled, labels will still be stored but not displayed."
+                },
+                "chainGrep.bookmarks.showSymbols": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Show bookmark symbols (❱, ❰) around bookmarked lines. When disabled, bookmarks will still show background color."
+                },
+                "chainGrep.chainedDocuments.maxBaseNameLength": {
+                    "type": "number",
+                    "default": 70,
+                    "description": "Maximum length of source filename in result documents filenames. Set to 0 to disable truncation."
+                },
+                "chainGrep.chainedDocuments.maxChainDescriptorLength": {
+                    "type": "number",
+                    "default": 30,
+                    "description": "Maximum length of chain descriptor in result documents filenames. Set to 0 to disable truncation."
+                },
+                "chainGrep.chainedDocuments.showDetailedInfo": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Include detailed chain information in result documents."
+                },
+                "chainGrep.highlights.palette": {
+                    "type": "string",
+                    "default": "#89CFF0:black, #FF6961:black, #77DD77:black, #C3A8FF:black, #FDFD96:black, #A0E7E5:black, #FFB7CE:black, #CCFF90:black, #B19CD9:black, #FF82A9:black, #A8BFFF:black, #FFDAB9:black, #A8D0FF:black, #FFE680:black, #A8E0FF:black, #FFCBA4:black, #E6A8D7:black, #FFCCD2:black, #ACE1AF:black, #FF99FF:black",
+                    "description": "Comma-separated list of background:foreground color pairs for highlights. Leave empty for default set."
                 },
                 "chainGrep.highlights.randomOrder": {
                     "type": "boolean",
                     "default": false,
                     "description": "Use a randomized order for highlight colors. Changing this setting will clear all highlights."
                 },
-                "chainGrep.documents.showDetailedInfo": {
+                "chainGrep.highlights.showScrollbarIndicators": {
                     "type": "boolean",
                     "default": true,
-                    "description": "Include detailed chain information in result documents."
+                    "description": "Show highlight indicators in the scrollbar (overview ruler)."
                 },
                 "chainGrep.system.cleanupInterval": {
                     "type": "number",
@@ -334,40 +359,10 @@
                     "default": false,
                     "description": "Enable detailed logging during cleanup operations for debugging purposes."
                 },
-                "chainGrep.documents.maxBaseNameLength": {
-                    "type": "number",
-                    "default": 70,
-                    "description": "Maximum length of source filename in result documents filenames. Set to 0 to disable truncation."
-                },
-                "chainGrep.documents.maxChainDescriptorLength": {
-                    "type": "number",
-                    "default": 30,
-                    "description": "Maximum length of chain descriptor in result documents filenames. Set to 0 to disable truncation."
-                },
-                "chainGrep.highlights.showScrollbarIndicators": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Show highlight indicators in the scrollbar (overview ruler)."
-                },
-                "chainGrep.bookmarks.showSymbols": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Show bookmark symbols (❱, ❰) around bookmarked lines. When disabled, bookmarks will still show background color."
-                },
-                "chainGrep.bookmarks.showLabels": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Show bookmark labels at the end of bookmarked lines. When disabled, labels will still be stored but not displayed."
-                },
-                "chainGrep.saveBookmarksInProject": {
+                "chainGrep.system.saveStateInProject": {
                     "type": "boolean",
                     "default": false,
-                    "markdownDescription": "Save bookmarks in project folder instead of user settings. Creates a .vscode/chain-grep-bookmarks.json file.\n\n*Note: Enables bookmark sharing between local and remote workspaces.*"
-                },
-                "chainGrep.cleanupOrphanedResources": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Enable cleanup of orphaned resources."
+                    "markdownDescription": "Save all extension state (bookmarks, chains, highlights, etc.) in project folder instead of user settings. Creates files in .vscode/ folder.\n\n*Note: Enables full extension state sharing between local and remote workspaces.*"
                 }
             }
         }

@@ -2,7 +2,12 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { Bookmark, BookmarkCache } from "../models/interfaces";
 import { BookmarkNode, BookmarkNodeType } from "../models/bookmarkNode";
-import { getBookmarkColor, areBookmarkSymbolsEnabled, areBookmarkLabelsEnabled } from "../services/configService";
+import {
+    getBookmarkColor,
+    areBookmarkSymbolsEnabled,
+    areBookmarkLabelsEnabled,
+    isStateSavingInProjectEnabled,
+} from "../services/configService";
 import { getChainGrepMap } from "../services/stateService";
 import { ChainGrepDataProvider } from "./chainGrepDataProvider";
 
@@ -36,6 +41,8 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
 
     private bookmarkUpdateDebounceTimer: NodeJS.Timeout | undefined;
     private bookmarkUpdatePending: Set<string> = new Set();
+
+    private readonly BOOKMARKS_FILE_NAME = "chain-grep-bookmarks.json";
 
     constructor() {
         this.getChainInfo = () => undefined;
@@ -414,13 +421,31 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
         this.clearBookmarksBy({ sourceUri }, { refreshView: true, refreshDecorations: true });
     }
 
-    clearAllBookmarks(): void {
+    async clearAllBookmarks(): Promise<void> {
         this.bookmarks.clear();
         this.sourceUriToBookmarks.clear();
         this.docLineToBookmarks.clear();
         this.sourceLineToBookmarks.clear();
 
         this.clearCache();
+
+        if (isStateSavingInProjectEnabled() && vscode.workspace.workspaceFolders?.length) {
+            try {
+                const workspaceFolder = vscode.workspace.workspaceFolders[0];
+                const vscodeUri = vscode.Uri.joinPath(workspaceFolder.uri, ".vscode");
+                const bookmarksFileUri = vscode.Uri.joinPath(vscodeUri, this.BOOKMARKS_FILE_NAME);
+
+                try {
+                    await vscode.workspace.fs.stat(bookmarksFileUri);
+                    await vscode.workspace.fs.writeFile(bookmarksFileUri, Buffer.from("[]", "utf-8"));
+                    console.log("ChainGrep: Bookmarks file cleared in workspace");
+                } catch (error) {
+                    console.log("ChainGrep: No bookmarks file found in workspace");
+                }
+            } catch (error) {
+                console.error("ChainGrep: Error clearing bookmarks file:", error);
+            }
+        }
 
         this.refresh();
         this.reapplyAllBookmarkDecorations();
@@ -532,7 +557,6 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                 }
             };
 
-            // --- Apply decorations for bookmarks created IN this document (source or chaingrep) ---
             const directBookmarks = this.getBookmarksForDocument(docUri);
             for (const bookmark of directBookmarks) {
                 if (bookmark.lineNumber !== undefined) {
@@ -540,14 +564,10 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                 }
             }
 
-            // --- Apply decorations based on the type of editor ---
             if (editor.document.uri.scheme !== "chaingrep") {
-                // --- Apply SOURCE file bookmarks TO the SOURCE file editor ---
-                const sourceBookmarks = this.getBookmarksForSourceURI(docUri); // docUri is the source URI here
+                const sourceBookmarks = this.getBookmarksForSourceURI(docUri);
                 for (const bookmark of sourceBookmarks) {
-                    // Apply only if it's purely a source bookmark and has a line number
                     if (bookmark.docUri === "" && bookmark.lineNumber !== undefined) {
-                        // Avoid applying decoration if this line was already decorated by a direct bookmark
                         const alreadyDecorated = bookmarkDecorations.some(
                             (d) => d.range.start.line === bookmark.lineNumber
                         );
@@ -557,19 +577,15 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                     }
                 }
             } else if (typeof this.getChainInfo === "function") {
-                // --- Apply SOURCE file bookmarks TO the CHAIN GREP view editor ---
                 const chainInfo = this.getChainInfo(docUri);
                 if (chainInfo && chainInfo.sourceUri) {
                     const sourceUriStr = chainInfo.sourceUri.toString();
                     const sourceBookmarks = this.getBookmarksForSourceURI(sourceUriStr);
 
                     for (const bookmark of sourceBookmarks) {
-                        // Apply only if it's purely a source bookmark and has a line number
                         if (bookmark.docUri === "" && bookmark.lineNumber !== undefined) {
-                            // Use cache to find the corresponding line in the Chain Grep view
                             const bestMatch = this.getCachedLineForBookmark(bookmark, docUri);
                             if (bestMatch !== undefined) {
-                                // Avoid applying decoration if this line was already decorated (e.g., by a direct bookmark or another source bookmark mapping here)
                                 const alreadyDecorated = bookmarkDecorations.some(
                                     (d) => d.range.start.line === bestMatch
                                 );
@@ -582,7 +598,6 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                 }
             }
 
-            // --- Set the decorations on the editor ---
             editor.setDecorations(this.bookmarkDecorationType, bookmarkDecorations);
             editor.setDecorations(this.labelDecorationType, labelDecorations);
         } catch (error) {
@@ -1154,7 +1169,7 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                     lineNumber: bestMatch,
                     docUri: targetDocUri,
                 };
-                this.bookmarkCache.contentHashCache.set(bookmark.id, this.calculateLineHash(bookmark.lineText));
+                this.bookmarkCache.contentHashCache.set(bookmark.id, this.calculateLineHash(newBookmark.lineText));
                 this.updateFileLinkCache(newBookmark);
 
                 return bestMatch;
@@ -1295,7 +1310,6 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                 matchingLineNumber < sourceDoc.lineCount
             ) {
                 const lineText = sourceDoc.lineAt(matchingLineNumber).text.trim();
-
                 const existingBookmarksAtLine = this.findBookmarks({
                     sourceUri: bookmark.sourceUri,
                     docUri: null,
@@ -2237,7 +2251,6 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
         return false;
     }
 
-    // Dodanie debugowania dla śledzenia problemów z zakładkami
     private logBookmarkDebug(message: string, ...args: any[]): void {
         if (vscode.workspace.getConfiguration("chainGrep").get<boolean>("debug", false)) {
             console.log(`[Bookmark Debug] ${message}`, ...args);

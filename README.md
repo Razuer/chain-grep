@@ -139,11 +139,11 @@ Below are some optional configuration keys that can be added to your user or wor
 {
     "chainGrep.highlights.randomOrder": false,
     "chainGrep.highlights.palette": "#89CFF0:black, #FF6961:black",
-    "chainGrep.documents.showDetailedInfo": true,
+    "chainGrep.chainedDocuments.showDetailedInfo": true,
     "chainGrep.highlights.showScrollbarIndicators": true,
     "chainGrep.system.cleanupInterval": 5,
-    "chainGrep.documents.maxBaseNameLength": 70,
-    "chainGrep.documents.maxChainDescriptorLength": 30,
+    "chainGrep.chainedDocuments.maxBaseNameLength": 70,
+    "chainGrep.chainedDocuments.maxChainDescriptorLength": 30,
     "chainGrep.bookmarks.color": "#3794FF",
     "chainGrep.bookmarks.showSymbols": true,
     "chainGrep.bookmarks.showLabels": true
@@ -161,7 +161,7 @@ Below are some optional configuration keys that can be added to your user or wor
     -   A comma-separated list of color pairs in the format `background:foreground`, e.g. `#89CFF0:black, #FF6961:black`.
     -   If not set, the extension uses a default palette.
 
--   **`chainGrep.documents.showDetailedInfo` (boolean)**
+-   **`chainGrep.chainedDocuments.showDetailedInfo` (boolean)**
 
     -   `true` => Displays detailed chain steps (header, queries, flags) in the results doc.
     -   `false` => Shows only the raw matched lines.
@@ -179,13 +179,13 @@ Below are some optional configuration keys that can be added to your user or wor
     -   Set to 0 to disable automatic cleanup.
     -   Default is 5 minutes.
 
--   **`chainGrep.documents.maxBaseNameLength` (number)**
+-   **`chainGrep.chainedDocuments.maxBaseNameLength` (number)**
 
     -   Maximum length of source filename in result documents filenames.
     -   Set to 0 to disable truncation.
     -   Default is 70 characters.
 
--   **`chainGrep.documents.maxChainDescriptorLength` (number)**
+-   **`chainGrep.chainedDocuments.maxChainDescriptorLength` (number)**
 
     -   Maximum length of chain descriptor in result documents filenames.
     -   Set to 0 to disable truncation.
