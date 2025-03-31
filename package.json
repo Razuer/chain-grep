@@ -121,6 +121,21 @@
                 "command": "_chainGrep.removeFileBookmarks",
                 "title": "Remove All Bookmarks in File",
                 "icon": "$(trash)"
+            },
+            {
+                "command": "_chainGrep.removeGlobalHighlight",
+                "title": "Remove Global Highlight",
+                "icon": "$(remove)"
+            },
+            {
+                "command": "_chainGrep.removeFileHighlight",
+                "title": "Remove File Highlight",
+                "icon": "$(remove)"
+            },
+            {
+                "command": "_chainGrep.clearFileHighlights",
+                "title": "Clear All Highlights in File",
+                "icon": "$(trash)"
             }
         ],
         "keybindings": [
@@ -167,6 +182,12 @@
                     "name": "Bookmarks",
                     "icon": "$(bookmark)",
                     "when": "true"
+                },
+                {
+                    "id": "chainGrepHighlights",
+                    "name": "Highlights",
+                    "icon": "$(symbol-color)",
+                    "when": "true"
                 }
             ]
         },
@@ -178,6 +199,10 @@
             {
                 "view": "chainGrepBookmarks",
                 "contents": "No bookmarks yet.\n\nPress Ctrl+Alt+B or right-click to add a bookmark at the current line.\n\nBookmarks work in both Chain Grep documents and files."
+            },
+            {
+                "view": "chainGrepHighlights",
+                "contents": "No highlights yet.\n\nSelect some text and press Ctrl+Alt+M for file highlights or Ctrl+Alt+Shift+M for global highlights.\n\nHighlights can be applied to both Chain Grep documents and normal files."
             }
         ],
         "submenus": [
@@ -211,6 +236,18 @@
                 {
                     "command": "_chainGrep.removeBookmark",
                     "when": "false"
+                },
+                {
+                    "command": "_chainGrep.removeGlobalHighlight",
+                    "when": "false"
+                },
+                {
+                    "command": "_chainGrep.removeFileHighlight",
+                    "when": "false"
+                },
+                {
+                    "command": "_chainGrep.clearFileHighlights",
+                    "when": "false"
                 }
             ],
             "view/title": [
@@ -238,6 +275,24 @@
                     "command": "chainGrep.clearCurrentDocBookmarks",
                     "when": "view == chainGrepBookmarks && editorIsOpen",
                     "group": "navigation@2"
+                },
+                {
+                    "command": "_chainGrep.clearAllGlobalHighlights",
+                    "when": "view == chainGrepHighlights",
+                    "group": "navigation@1",
+                    "icon": {
+                        "light": "icons/light/remove-global-highlights.svg",
+                        "dark": "icons/dark/remove-global-highlights.svg"
+                    }
+                },
+                {
+                    "command": "chainGrep.clearAllLocalHighlights",
+                    "when": "view == chainGrepHighlights",
+                    "group": "navigation@2",
+                    "icon": {
+                        "light": "icons/light/remove-chained-highlights.svg",
+                        "dark": "icons/dark/remove-chained-highlights.svg"
+                    }
                 }
             ],
             "view/item/context": [
@@ -259,6 +314,21 @@
                 {
                     "command": "_chainGrep.removeFileBookmarks",
                     "when": "view == chainGrepBookmarks && viewItem == fileRoot",
+                    "group": "inline"
+                },
+                {
+                    "command": "_chainGrep.removeGlobalHighlight",
+                    "when": "viewItem == globalHighlightItem && view == chainGrepHighlights",
+                    "group": "inline"
+                },
+                {
+                    "command": "_chainGrep.removeFileHighlight",
+                    "when": "viewItem == fileHighlightItem && view == chainGrepHighlights",
+                    "group": "inline"
+                },
+                {
+                    "command": "_chainGrep.clearFileHighlights",
+                    "when": "viewItem == fileItem && view == chainGrepHighlights",
                     "group": "inline"
                 }
             ],

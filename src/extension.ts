@@ -6,6 +6,8 @@ import { BookmarkNode } from "./models/bookmarkNode";
 import { ChainGrepDataProvider } from "./providers/chainGrepDataProvider";
 import { BookmarkProvider } from "./providers/bookmarkProvider";
 import { ChainGrepFSProvider } from "./providers/chainGrepFSProvider";
+import { HighlightProvider } from "./providers/highlightProvider";
+import { HighlightNode } from "./models/highlightNode";
 import {
     initHighlightDecorations,
     toggleHighlightGlobal,
@@ -59,6 +61,7 @@ const bookmarkProvider = new BookmarkProvider();
 const chainGrepMap = getChainGrepMap();
 const chainGrepContents = getChainGrepContents();
 let chainTreeView: vscode.TreeView<ChainGrepNode> | undefined;
+let highlightProvider: HighlightProvider;
 let cleanupInterval: NodeJS.Timeout | undefined;
 
 let saveTimeout: NodeJS.Timeout | undefined;
@@ -107,6 +110,12 @@ export async function activate(context: vscode.ExtensionContext) {
         showCollapseAll: true,
     });
 
+    highlightProvider = new HighlightProvider(chainGrepMap);
+    const highlightTreeView = vscode.window.createTreeView("chainGrepHighlights", {
+        treeDataProvider: highlightProvider,
+        showCollapseAll: true,
+    });
+
     bookmarkProvider.setTreeView(bookmarkTreeView);
     bookmarkProvider.setChainGrepTree(chainGrepProvider, chainTreeView);
 
@@ -117,7 +126,13 @@ export async function activate(context: vscode.ExtensionContext) {
         }
     });
 
-    context.subscriptions.push(chainTreeView, bookmarkTreeView);
+    highlightTreeView.onDidChangeVisibility((e) => {
+        if (e.visible) {
+            highlightProvider.refresh();
+        }
+    });
+
+    context.subscriptions.push(chainTreeView, bookmarkTreeView, highlightTreeView);
 
     cleanupUnusedResources(false, isCleanupLoggingEnabled());
 
@@ -177,22 +192,50 @@ export async function activate(context: vscode.ExtensionContext) {
 
     const clearAllLocalHighlightsCmd = vscode.commands.registerCommand("chainGrep.clearAllLocalHighlights", () => {
         clearAllLocalHighlights(chainGrepMap);
+        highlightProvider.refresh();
         savePersistentState();
     });
 
     const clearAllGlobalHighlightsCmd = vscode.commands.registerCommand("_chainGrep.clearAllGlobalHighlights", () => {
         clearHighlightsGlobal(true);
+        highlightProvider.refresh();
         savePersistentState();
     });
+
+    const removeGlobalHighlightCmd = vscode.commands.registerCommand(
+        "_chainGrep.removeGlobalHighlight",
+        (node: HighlightNode) => {
+            highlightProvider.removeGlobalHighlight(node);
+            savePersistentState();
+        }
+    );
+
+    const removeFileHighlightCmd = vscode.commands.registerCommand(
+        "_chainGrep.removeFileHighlight",
+        (node: HighlightNode) => {
+            highlightProvider.removeFileHighlight(node);
+            savePersistentState();
+        }
+    );
+
+    const clearFileHighlightsCmd = vscode.commands.registerCommand(
+        "_chainGrep.clearFileHighlights",
+        (node: HighlightNode) => {
+            highlightProvider.clearFileHighlights(node);
+            savePersistentState();
+        }
+    );
 
     const toggleHighlightCmd = vscode.commands.registerTextEditorCommand("chainGrep.toggleHighlight", (editor) => {
         const text = getSelectedTextOrWord(editor);
         toggleHighlightLocal(editor, text, chainGrepMap);
+        highlightProvider.refresh();
         savePersistentState();
     });
 
     const clearHighlightsCmd = vscode.commands.registerTextEditorCommand("chainGrep.clearHighlights", (editor) => {
         clearHighlightsLocal(editor, chainGrepMap);
+        highlightProvider.refresh();
         savePersistentState();
     });
 
@@ -201,6 +244,7 @@ export async function activate(context: vscode.ExtensionContext) {
         (editor) => {
             const text = getSelectedTextOrWord(editor);
             toggleHighlightGlobal(editor, text, chainGrepMap);
+            highlightProvider.refresh();
             savePersistentState();
         }
     );
@@ -209,6 +253,7 @@ export async function activate(context: vscode.ExtensionContext) {
         "chainGrep.clearHighlightsGlobal",
         () => {
             clearHighlightsGlobal(false);
+            highlightProvider.refresh();
             savePersistentState();
         }
     );
@@ -419,6 +464,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 reapplyHighlightsLocal(editor, chainGrepMap);
                 reapplyHighlightsGlobal(editor);
                 bookmarkProvider.refresh();
+                highlightProvider.refresh();
                 setTimeout(() => {
                     bookmarkProvider.reapplyAllBookmarkDecorations();
                 }, 50);
@@ -517,6 +563,9 @@ export async function activate(context: vscode.ExtensionContext) {
                 bookmarkProvider.synchronizeBookmarksOnFileSave(docUri, document);
             }
         }),
+        removeGlobalHighlightCmd,
+        removeFileHighlightCmd,
+        clearFileHighlightsCmd,
         toggleHighlightCmd,
         clearHighlightsCmd,
         toggleHighlightGlobalCmd,

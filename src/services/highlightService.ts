@@ -797,3 +797,35 @@ function removeEmptyHighlightGroups(): number {
 
     return removedCount;
 }
+
+export function getGlobalHighlights(): (string | undefined)[] {
+    return globalHighlightWords;
+}
+
+export function getLocalHighlightMap(): Map<string, LocalHighlightState> {
+    return localHighlightMap;
+}
+
+export function getHighlightColor(index: number): { background: string; foreground: string } | undefined {
+    if (index < 0 || index >= highlightDecorations.length) {
+        return undefined;
+    }
+
+    const decoration = highlightDecorations[index];
+    const palette = loadConfiguredPalette();
+    const colorPairs = palette.split(",").map((pair) =>
+        pair
+            .trim()
+            .split(":")
+            .map((c) => c.trim())
+    );
+
+    if (index < colorPairs.length) {
+        return {
+            background: colorPairs[index][0],
+            foreground: colorPairs[index][1],
+        };
+    }
+
+    return undefined;
+}
