@@ -1,5 +1,4 @@
 import * as vscode from "vscode";
-import * as fs from "fs";
 import * as path from "path";
 import { Bookmark, BookmarkCache } from "../models/interfaces";
 import { BookmarkNode, BookmarkNodeType } from "../models/bookmarkNode";
@@ -8,11 +7,12 @@ import {
     areBookmarkSymbolsEnabled,
     areBookmarkLabelsEnabled,
     isStateSavingInProjectEnabled,
+    isDetailedChainDocEnabled,
 } from "../services/configService";
-import { getChainGrepMap } from "../services/stateService";
+import { getChainGrepMap, getChainGrepContents } from "../services/stateService";
 import { ChainGrepDataProvider } from "./chainGrepDataProvider";
-import * as crypto from "crypto";
-import { saveBookmarksToWorkspace } from "../services/stateService";
+import { saveBookmarksToWorkspace, savePersistentState } from "../services/stateService";
+import { executeChainSearch, buildChainDetailedHeader } from "../services/searchService";
 
 export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
     private _onDidChangeTreeData: vscode.EventEmitter<BookmarkNode | undefined | void> = new vscode.EventEmitter();
@@ -964,6 +964,35 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
 
         try {
             if (bookmark.docUri && bookmark.docUri.startsWith("chaingrep:")) {
+                const chainGrepContents = getChainGrepContents();
+                const chainGrepMap = getChainGrepMap();
+
+                if (!chainGrepContents.has(bookmark.docUri)) {
+                    const chainDoc = chainGrepMap.get(bookmark.docUri);
+                    if (chainDoc) {
+                        await vscode.window.withProgress(
+                            {
+                                location: vscode.ProgressLocation.Notification,
+                                title: "Regenerating chain grep results...",
+                                cancellable: false,
+                            },
+                            async () => {
+                                const { chain, sourceUri } = chainDoc;
+                                const { lines, stats } = await executeChainSearch(sourceUri, chain);
+                                const header = buildChainDetailedHeader(chain, stats);
+                                let content = "";
+                                if (isDetailedChainDocEnabled()) {
+                                    content = header + "\n\n" + lines.join("\n");
+                                } else {
+                                    content = lines.join("\n");
+                                }
+                                chainGrepContents.set(bookmark.docUri!, content);
+                                savePersistentState();
+                            }
+                        );
+                    }
+                }
+
                 const chainGrepUri = vscode.Uri.parse(bookmark.docUri);
                 const doc = await vscode.workspace.openTextDocument(chainGrepUri);
                 const editor = await vscode.window.showTextDocument(doc, {
@@ -994,7 +1023,7 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
             }
         } catch (error) {
             console.error(`Error opening bookmark: ${error}`);
-            vscode.window.showErrorMessage("Failed to open bookmark. The file may have been deleted or moved.");
+            vscode.window.showErrorMessage(`Failed to open bookmark: ${error}`);
         }
     }
 
