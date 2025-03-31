@@ -503,7 +503,19 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.workspace.onDidOpenTextDocument((document) => {
             setTimeout(() => {
                 bookmarkProvider.reapplyAllBookmarkDecorations();
+
+                const docUri = document.uri.toString();
+                if (!docUri.startsWith("chaingrep:")) {
+                    bookmarkProvider.restoreBookmarksForDocument(docUri, document);
+                }
             }, 200);
+        }),
+        vscode.workspace.onDidSaveTextDocument((document) => {
+            const docUri = document.uri.toString();
+            if (!docUri.startsWith("chaingrep:")) {
+                console.log(`ChainGrep: Document saved: ${docUri}, synchronizing bookmarks`);
+                bookmarkProvider.synchronizeBookmarksOnFileSave(docUri, document);
+            }
         }),
         toggleHighlightCmd,
         clearHighlightsCmd,
@@ -537,8 +549,20 @@ export async function activate(context: vscode.ExtensionContext) {
             if (saveTimeout) {
                 clearTimeout(saveTimeout);
             }
+        }),
+        vscode.workspace.onDidCloseTextDocument(async (document) => {
+            if (document.isDirty && document.uri.scheme !== "chaingrep") {
+                await bookmarkProvider.revertUnsavedChanges(document.uri.toString());
+            }
         })
     );
+
+    vscode.window.visibleTextEditors.forEach((editor) => {
+        if (editor.document.uri.scheme === CHAIN_GREP_SCHEME) {
+            applyHighlightsToOpenEditors(chainGrepMap);
+            bookmarkProvider.reapplyAllBookmarkDecorations();
+        }
+    });
 }
 
 export function deactivate() {

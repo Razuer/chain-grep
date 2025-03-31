@@ -28,6 +28,7 @@ export interface Bookmark {
     label?: string;
     timestamp: number;
     linkedBookmarkId?: string;
+    lastSavedText?: string;
 
     context?: {
         beforeLines?: string[];
