@@ -234,7 +234,7 @@ export async function loadStateFromWorkspace(chainGrepProvider: ChainGrepDataPro
 
             loadedAnyData = true;
         } catch (error) {
-            console.log("No chains file found in workspace or error reading it:", error);
+            console.log("ChainGrep: No chains file found in workspace or error reading it:", error);
         }
 
         try {
@@ -250,7 +250,7 @@ export async function loadStateFromWorkspace(chainGrepProvider: ChainGrepDataPro
 
             loadedAnyData = true;
         } catch (error) {
-            console.log("No contents file found in workspace or error reading it:", error);
+            console.log("ChainGrep: No contents file found in workspace or error reading it:", error);
         }
 
         try {
@@ -261,7 +261,7 @@ export async function loadStateFromWorkspace(chainGrepProvider: ChainGrepDataPro
             restoreHighlightState(highlightsData);
             loadedAnyData = true;
         } catch (error) {
-            console.log("No highlights file found in workspace or error reading it:", error);
+            console.log("ChainGrep: No highlights file found in workspace or error reading it:", error);
         }
 
         if (chainGrepMap.size > 0) {

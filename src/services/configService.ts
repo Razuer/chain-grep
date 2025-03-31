@@ -148,7 +148,7 @@ export function handleConfigChange(
     }
 
     if (e.affectsConfiguration("chainGrep.highlights.palette")) {
-        console.log("Chain Grep: Color palette changed, resetting all highlights");
+        console.log("ChainGrep: Color palette changed, resetting all highlights");
         highlightService.resetAllHighlightDecorations(params.chainGrepMap, true);
     }
 

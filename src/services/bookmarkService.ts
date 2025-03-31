@@ -151,7 +151,7 @@ export async function addBookmarkAtCurrentLine(bookmarkProvider: BookmarkProvide
 
                     await bookmarkProvider.synchronizeBookmarkToAllChainDocs(sourceBookmark);
                 } else {
-                    console.log("Creating new source bookmark for Chain Grep bookmark");
+                    console.log("ChainGrep: Creating new source bookmark for Chain Grep bookmark");
 
                     try {
                         const sourceDoc = await vscode.workspace.openTextDocument(vscode.Uri.parse(sourceUri));

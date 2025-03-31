@@ -2404,7 +2404,7 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
 
     private logBookmarkDebug(message: string, ...args: any[]): void {
         if (vscode.workspace.getConfiguration("chainGrep").get<boolean>("debug", false)) {
-            console.log(`[Bookmark Debug] ${message}`, ...args);
+            console.log(`ChainGrep: ${message}`, ...args);
         }
     }
 

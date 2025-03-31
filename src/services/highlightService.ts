@@ -437,7 +437,7 @@ export function clearHighlightsLocal(editor: vscode.TextEditor, chainGrepMap: Ma
     state.next = 0;
 
     localHighlightMap.delete(groupKey);
-    console.log(`Chain Grep: Removed empty highlight group after clearing: ${groupKey}`);
+    console.log(`ChainGrep: Removed empty highlight group after clearing: ${groupKey}`);
 }
 
 export function reapplyHighlightsLocal(editor: vscode.TextEditor, chainGrepMap: Map<string, any>) {
@@ -460,7 +460,7 @@ export function reapplyHighlightsLocal(editor: vscode.TextEditor, chainGrepMap: 
 export function applyHighlightsToOpenEditors(chainGrepMap: Map<string, any>) {
     try {
         if (highlightDecorations.length === 0) {
-            console.log("Chain Grep: Initializing global highlights before applying");
+            console.log("ChainGrep: Initializing global highlights before applying");
             initHighlightDecorations();
         }
 
@@ -470,7 +470,7 @@ export function applyHighlightsToOpenEditors(chainGrepMap: Map<string, any>) {
             reapplyHighlightsLocal(editor, chainGrepMap);
         }
 
-        console.log("Chain Grep: Successfully applied highlights to all open editors");
+        console.log("ChainGrep: Successfully applied highlights to all open editors");
         return true;
     } catch (error) {
         console.error("Chain Grep: Error applying highlights to editors", error);
@@ -534,7 +534,7 @@ export function clearAllLocalHighlights(chainGrepMap: Map<string, any>): number 
             localColorIndexMaps.delete(key);
         }
 
-        console.log(`Chain Grep: Removed highlight group for ${key}`);
+        console.log(`ChainGrep: Removed highlight group for ${key}`);
     }
 
     if (clearedCount > 0) {
@@ -570,12 +570,12 @@ export function getHighlightState() {
 export function restoreHighlightState(state: any) {
     try {
         if (!state) {
-            console.log("Chain Grep: No highlight state to restore");
+            console.log("ChainGrep: No highlight state to restore");
             return;
         }
 
         if (highlightDecorations.length === 0) {
-            console.log("Chain Grep: Creating decorations before restoring state");
+            console.log("ChainGrep: Creating decorations before restoring state");
             initHighlightDecorations();
         }
 
@@ -597,7 +597,7 @@ export function restoreHighlightState(state: any) {
             );
 
             if (definedWords.length > 0) {
-                console.log(`Chain Grep: Restored ${definedWords.length} global highlight words`);
+                console.log(`ChainGrep: Restored ${definedWords.length} global highlight words`);
             }
         }
 
@@ -631,10 +631,10 @@ export function restoreHighlightState(state: any) {
                     if (localHighlightMap.has(key)) {
                         localHighlightMap.delete(key);
                     }
-                    console.log(`Chain Grep: Removed empty local highlight group for ${key}`);
+                    console.log(`ChainGrep: Removed empty local highlight group for ${key}`);
                 }
             }
-            console.log(`Chain Grep: Restored local highlights for ${restoredGroupCount} groups`);
+            console.log(`ChainGrep: Restored local highlights for ${restoredGroupCount} groups`);
 
             removeEmptyHighlightGroups();
         }
@@ -680,14 +680,14 @@ export function restoreHighlightState(state: any) {
             }
         }
 
-        console.log("Chain Grep: Successfully restored highlight state");
+        console.log("ChainGrep: Successfully restored highlight state");
     } catch (error) {
-        console.error("Chain Grep: Error restoring highlight state", error);
+        console.error("ChainGrep: Error restoring highlight state", error);
     }
 }
 
 export function resetAllHighlightDecorations(chainGrepMap: Map<string, any>, clearHighlights: boolean = false): void {
-    console.log(`Chain Grep: Resetting all highlight decorations (clearHighlights: ${clearHighlights})`);
+    console.log(`ChainGrep: Resetting all highlight decorations (clearHighlights: ${clearHighlights})`);
 
     try {
         highlightDecorations.forEach((decoration) => decoration.dispose());
@@ -756,7 +756,7 @@ export function resetAllHighlightDecorations(chainGrepMap: Map<string, any>, cle
         }
 
         applyHighlightsToOpenEditors(chainGrepMap);
-        console.log("Chain Grep: Successfully reset and reapplied all highlight decorations");
+        console.log("ChainGrep: Successfully reset and reapplied all highlight decorations");
     } catch (error) {
         console.error("Chain Grep: Error resetting highlight decorations", error);
     }
@@ -788,11 +788,11 @@ function removeEmptyHighlightGroups(): number {
         }
 
         removedCount++;
-        console.log(`Chain Grep: Removed empty highlight group for key: ${key}`);
+        console.log(`ChainGrep: Removed empty highlight group for key: ${key}`);
     }
 
     if (removedCount > 0) {
-        console.log(`Chain Grep: Removed ${removedCount} empty highlight groups`);
+        console.log(`ChainGrep: Removed ${removedCount} empty highlight groups`);
     }
 
     return removedCount;
