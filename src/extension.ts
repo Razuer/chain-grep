@@ -161,13 +161,13 @@ export async function activate(context: vscode.ExtensionContext) {
     const removeBookmarkCmd = vscode.commands.registerCommand("_chainGrep.removeBookmark", (node: BookmarkNode) => {
         bookmarkProvider.removeBookmarkWithRelated(node.bookmark.id);
         debouncedSaveState();
-        vscode.window.showInformationMessage("Bookmark and related references removed.");
+        vscode.window.showInformationMessage("Chain Grep: Bookmark removed");
     });
 
     const clearBookmarksCmd = vscode.commands.registerCommand("chainGrep.clearBookmarks", async () => {
         await bookmarkProvider.clearAllBookmarks();
         savePersistentState();
-        vscode.window.showInformationMessage("Cleared all bookmarks from all files.");
+        vscode.window.showInformationMessage("Chain Grep: All bookmarks cleared");
     });
 
     const clearCurrentDocBookmarksCmd = vscode.commands.registerCommand("chainGrep.clearCurrentDocBookmarks", () => {
@@ -327,7 +327,7 @@ export async function activate(context: vscode.ExtensionContext) {
         const chainDocUri = chainEditor.document.uri;
         const docUriStr = chainDocUri.toString();
         if (!chainGrepMap.has(docUriStr)) {
-            vscode.window.showInformationMessage("No chain grep found for this document.");
+            vscode.window.showInformationMessage("Chain Grep: No chain grep found");
             return;
         }
         const chainInfo = chainGrepMap.get(docUriStr)!;
@@ -346,7 +346,7 @@ export async function activate(context: vscode.ExtensionContext) {
             });
             await executeChainSearchAndUpdateEditor(sourceUri, chainInfo.chain, newChainEditor, bookmarkProvider);
         } catch {
-            vscode.window.showInformationMessage("Unable to refresh the source document.");
+            vscode.window.showInformationMessage("Chain Grep: Unable to refresh source document");
         }
     });
 

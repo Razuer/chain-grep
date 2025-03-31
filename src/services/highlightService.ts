@@ -162,7 +162,7 @@ export function toggleHighlightGlobal(
 export function clearHighlightsGlobal(showMessage = true): boolean {
     if (globalHighlightWords.every((w) => w === undefined)) {
         if (showMessage) {
-            vscode.window.showInformationMessage("Chain Grep: No global highlights to clear");
+            vscode.window.showInformationMessage("No global highlights to clear");
         }
         return false;
     }
@@ -180,7 +180,7 @@ export function clearHighlightsGlobal(showMessage = true): boolean {
     }
 
     if (showMessage) {
-        vscode.window.showInformationMessage("Chain Grep: Cleared all global highlights");
+        vscode.window.showInformationMessage("Global highlights cleared");
     }
 
     return true;
@@ -480,7 +480,7 @@ export function applyHighlightsToOpenEditors(chainGrepMap: Map<string, any>) {
 
 export function clearAllLocalHighlights(chainGrepMap: Map<string, any>): number {
     if (localHighlightMap.size === 0) {
-        vscode.window.showInformationMessage("Chain Grep: No chained highlights to clear");
+        vscode.window.showInformationMessage("No chained highlights to clear");
         return 0;
     }
 
@@ -538,9 +538,9 @@ export function clearAllLocalHighlights(chainGrepMap: Map<string, any>): number 
     }
 
     if (clearedCount > 0) {
-        vscode.window.showInformationMessage(`Chain Grep: Cleared chained highlights for ${clearedCount} document(s)`);
+        vscode.window.showInformationMessage(`Cleared highlights for ${clearedCount} document(s)`);
     } else {
-        vscode.window.showInformationMessage("Chain Grep: No chained highlights found to clear");
+        vscode.window.showInformationMessage("No chained highlights found");
     }
 
     return clearedCount;

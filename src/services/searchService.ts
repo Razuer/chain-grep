@@ -51,7 +51,7 @@ export function applyChainQuery(lines: string[], query: ChainGrepQuery): string[
             const isInverted = query.inverted;
             return lines.filter((line) => isInverted !== regex.test(line));
         } catch {
-            vscode.window.showInformationMessage("Invalid regular expression in chain.");
+            vscode.window.showInformationMessage("Chain Grep: Invalid regular expression in chain.");
             return lines;
         }
     }
@@ -60,19 +60,34 @@ export function applyChainQuery(lines: string[], query: ChainGrepQuery): string[
 export async function executeChainSearch(
     sourceUri: vscode.Uri,
     chain: ChainGrepQuery[]
-): Promise<{ lines: string[]; stats: any }> {
+): Promise<{
+    lines: string[];
+    stats: { totalLines: number; steps: { step: number; query: string; matchCount: number }[] };
+}> {
+    for (const query of chain) {
+        if (query.type === "regex") {
+            try {
+                new RegExp(query.query, query.flags);
+            } catch (e) {
+                vscode.window.showInformationMessage("Chain Grep: Invalid regex in chain");
+                return { lines: [], stats: { totalLines: 0, steps: [] } };
+            }
+        }
+    }
+
     const validationErrors = await validateChain(chain);
-    if (validationErrors.length) {
-        vscode.window.showInformationMessage("Validation errors found: " + validationErrors.join("; "));
-        return { lines: [], stats: {} };
+    if (validationErrors.length > 0) {
+        vscode.window.showInformationMessage("Chain Grep: Validation errors: " + validationErrors.join("; "));
+        return { lines: [], stats: { totalLines: 0, steps: [] } };
     }
 
     let sourceDoc: vscode.TextDocument;
     try {
         sourceDoc = await vscode.workspace.openTextDocument(sourceUri);
-    } catch {
-        vscode.window.showInformationMessage("Unable to open source document.");
-        return { lines: [], stats: {} };
+    } catch (error) {
+        console.error("Chain Grep: Failed to open source document:", error);
+        vscode.window.showInformationMessage("Chain Grep: Unable to open source document");
+        return { lines: [], stats: { totalLines: 0, steps: [] } };
     }
 
     const lines: string[] = Array(sourceDoc.lineCount);

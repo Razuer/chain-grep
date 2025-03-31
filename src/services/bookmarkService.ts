@@ -8,7 +8,7 @@ import { BookmarkProvider } from "../providers/bookmarkProvider";
 export async function addBookmarkAtCurrentLine(bookmarkProvider: BookmarkProvider): Promise<void> {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
-        vscode.window.showInformationMessage("No active editor.");
+        vscode.window.showInformationMessage("No active editor");
         return;
     }
 
@@ -22,7 +22,7 @@ export async function addBookmarkAtCurrentLine(bookmarkProvider: BookmarkProvide
         const chainGrepMap = getChainGrepMap();
         chainInfo = chainGrepMap.get(docUri);
         if (!chainInfo) {
-            vscode.window.showInformationMessage("No chain info for this document.");
+            vscode.window.showInformationMessage("No chain info for this document");
             return;
         }
         sourceUri = chainInfo.sourceUri.toString();
@@ -45,7 +45,7 @@ export async function addBookmarkAtCurrentLine(bookmarkProvider: BookmarkProvide
 
     if (existingBookmark) {
         bookmarkProvider.removeBookmark(existingBookmark.id);
-        vscode.window.showInformationMessage("Bookmark removed.");
+        vscode.window.showInformationMessage("Bookmark removed");
         return;
     }
 
@@ -205,26 +205,44 @@ export async function addBookmarkAtCurrentLine(bookmarkProvider: BookmarkProvide
         bookmarkProvider.reapplyAllBookmarkDecorations();
     }, 300);
 
-    vscode.window.showInformationMessage("Bookmark added and synchronized.");
+    vscode.window.showInformationMessage("Bookmark added");
+}
+
+export function removeBookmarkIfExists(bookmarkProvider: BookmarkProvider): boolean {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+        vscode.window.showInformationMessage("No active editor");
+        return false;
+    }
+
+    const docUri = editor.document.uri.toString();
+    const bookmarks = bookmarkProvider.getAllBookmarks().filter((b) => b.docUri === docUri);
+
+    if (bookmarks.length > 0) {
+        for (const bookmark of bookmarks) {
+            bookmarkProvider.removeBookmarkWithRelated(bookmark.id);
+        }
+        vscode.window.showInformationMessage("Bookmark removed");
+        return true;
+    }
+
+    return false;
 }
 
 export function clearCurrentDocumentBookmarks(bookmarkProvider: BookmarkProvider): void {
-    const activeEditor = vscode.window.activeTextEditor;
-    if (!activeEditor) {
-        vscode.window.showInformationMessage("No active editor.");
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+        vscode.window.showInformationMessage("No active editor");
         return;
     }
 
-    const activeDocUri = activeEditor.document.uri.toString();
+    const docUri = editor.document.uri.toString();
+    bookmarkProvider.clearBookmarksBy({ docUri }, { refreshView: true, refreshDecorations: true });
 
-    if (activeDocUri.startsWith("chaingrep:")) {
-        bookmarkProvider.clearBookmarksFromDocument(activeDocUri);
-        vscode.window.showInformationMessage("Cleared bookmarks from current Chain Grep document.");
+    if (docUri.startsWith("chaingrep:")) {
+        vscode.window.showInformationMessage("Bookmarks cleared from document");
     } else {
-        bookmarkProvider.clearBookmarksFromFile(activeDocUri);
-        vscode.window.showInformationMessage(
-            "Cleared all bookmarks from current file and related Chain Grep documents."
-        );
+        vscode.window.showInformationMessage("Bookmarks cleared from document");
     }
 }
 
@@ -381,10 +399,11 @@ export async function synchronizeBookmarksToAllExistingDocuments(
 }
 
 export function removeFileBookmarks(node: BookmarkNode, bookmarkProvider: BookmarkProvider): void {
-    if (node.type !== BookmarkNodeType.FileRoot) {
-        vscode.window.showInformationMessage("This operation is only valid for file nodes.");
+    if (node.type !== "fileRoot") {
+        vscode.window.showInformationMessage("Only valid for file nodes");
         return;
     }
+
     bookmarkProvider.removeBookmarksForSourceFile(node.bookmark.sourceUri);
-    vscode.window.showInformationMessage("All bookmarks in file removed.");
+    vscode.window.showInformationMessage("File bookmarks removed");
 }
