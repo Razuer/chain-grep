@@ -34,11 +34,7 @@ import {
     isCleanupLoggingEnabled,
     handleConfigChange,
 } from "./services/configService";
-import {
-    addBookmarkAtCurrentLine,
-    removeFileBookmarks,
-    clearCurrentDocumentBookmarks,
-} from "./services/bookmarkService";
+import { addBookmarkAtCurrentLine, removeFileBookmarks } from "./services/bookmarkService";
 import { getSelectedTextOrWord } from "./utils/utils";
 import { showQueryAndOptionsQuickInput, processRegexInput } from "./services/uiService";
 import {
@@ -183,11 +179,6 @@ export async function activate(context: vscode.ExtensionContext) {
         await bookmarkProvider.clearAllBookmarks();
         savePersistentState();
         vscode.window.showInformationMessage("Chain Grep: All bookmarks cleared");
-    });
-
-    const clearCurrentDocBookmarksCmd = vscode.commands.registerCommand("chainGrep.clearCurrentDocBookmarks", () => {
-        clearCurrentDocumentBookmarks(bookmarkProvider);
-        savePersistentState();
     });
 
     const clearAllLocalHighlightsCmd = vscode.commands.registerCommand("chainGrep.clearAllLocalHighlights", () => {
@@ -457,7 +448,6 @@ export async function activate(context: vscode.ExtensionContext) {
         openBookmarkCmd,
         removeBookmarkCmd,
         clearBookmarksCmd,
-        clearCurrentDocBookmarksCmd,
         removeFileBookmarksCommand,
         vscode.window.onDidChangeActiveTextEditor((editor) => {
             if (editor) {

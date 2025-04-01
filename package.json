@@ -113,11 +113,6 @@
                 "icon": "$(clear-all)"
             },
             {
-                "command": "chainGrep.clearCurrentDocBookmarks",
-                "title": "Chain Grep: Clear Document Bookmarks",
-                "icon": "$(close)"
-            },
-            {
                 "command": "_chainGrep.removeFileBookmarks",
                 "title": "Remove All Bookmarks in File",
                 "icon": "$(trash)"
@@ -260,11 +255,6 @@
                     "command": "chainGrep.clearBookmarks",
                     "when": "view == chainGrepBookmarks",
                     "group": "navigation@1"
-                },
-                {
-                    "command": "chainGrep.clearCurrentDocBookmarks",
-                    "when": "view == chainGrepBookmarks && editorIsOpen",
-                    "group": "navigation@2"
                 },
                 {
                     "command": "_chainGrep.clearAllGlobalHighlights",
