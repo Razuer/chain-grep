@@ -29,17 +29,19 @@ export class HighlightNode extends vscode.TreeItem {
         this.children.push(child);
     }
 
+    setDescription(value: string) {
+        this.description = value;
+    }
+
     private setupNodeAppearance() {
         this.contextValue = this.type;
 
         switch (this.type) {
             case HighlightNodeType.GlobalRoot:
                 this.iconPath = new vscode.ThemeIcon("globe");
-                this.description = "Global highlights";
                 break;
             case HighlightNodeType.FilesRoot:
                 this.iconPath = new vscode.ThemeIcon("files");
-                this.description = "File-specific highlights";
                 break;
             case HighlightNodeType.FileItem:
                 this.iconPath = new vscode.ThemeIcon("file");
@@ -51,7 +53,7 @@ export class HighlightNode extends vscode.TreeItem {
             case HighlightNodeType.HighlightItem:
                 this.contextValue = this.isGlobal ? "globalHighlightItem" : "fileHighlightItem";
                 this.iconPath = new vscode.ThemeIcon("whole-word");
-                this.description = this.isGlobal ? "global" : "";
+                this.description = "";
                 this.tooltip = this.getTooltip();
                 this.command = undefined;
                 break;

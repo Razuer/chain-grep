@@ -31,10 +31,42 @@ export class HighlightProvider implements vscode.TreeDataProvider<HighlightNode>
             vscode.TreeItemCollapsibleState.Collapsed,
             HighlightNodeType.FilesRoot
         );
+
+        this.updateNodeDescriptions();
     }
 
     refresh(): void {
+        this.updateNodeDescriptions();
         this._onDidChangeTreeData.fire();
+    }
+
+    private updateNodeDescriptions(): void {
+        const globalHighlights = getGlobalHighlights();
+        const globalCount = globalHighlights ? globalHighlights.filter((h) => h !== undefined).length : 0;
+        this.globalRootNode.setDescription(
+            globalCount > 0 ? `${globalCount} highlight${globalCount !== 1 ? "s" : ""}` : ""
+        );
+
+        const localHighlightMap = getLocalHighlightMap();
+
+        if (!localHighlightMap || localHighlightMap.size === 0) {
+            this.filesRootNode.setDescription("");
+            return;
+        }
+
+        let filesWithHighlights = 0;
+        for (const [_, highlightState] of localHighlightMap.entries()) {
+            if (highlightState && highlightState.words) {
+                const hasHighlights = highlightState.words.some((word) => word !== undefined);
+                if (hasHighlights) {
+                    filesWithHighlights++;
+                }
+            }
+        }
+
+        this.filesRootNode.setDescription(
+            filesWithHighlights > 0 ? `${filesWithHighlights} file${filesWithHighlights !== 1 ? "s" : ""}` : ""
+        );
     }
 
     getTreeItem(element: HighlightNode): vscode.TreeItem {
@@ -103,13 +135,16 @@ export class HighlightProvider implements vscode.TreeDataProvider<HighlightNode>
                 continue;
             }
 
+            const fileHighlights = highlightState.words.filter((word) => word !== undefined);
+            if (fileHighlights.length === 0) {
+                continue;
+            }
+
             let fileName = docUri;
             try {
                 const uri = vscode.Uri.parse(docUri);
                 fileName = path.basename(uri.path);
-            } catch (error) {
-                // Use the docUri as fallback
-            }
+            } catch (error) {}
 
             const fileNode = new HighlightNode(
                 fileName,
@@ -134,6 +169,10 @@ export class HighlightProvider implements vscode.TreeDataProvider<HighlightNode>
                     fileNode.addChild(highlightNode);
                 }
             }
+
+            fileNode.setDescription(
+                `${fileNode.children.length} highlight${fileNode.children.length !== 1 ? "s" : ""}`
+            );
 
             if (fileNode.children.length > 0) {
                 fileNodes.push(fileNode);

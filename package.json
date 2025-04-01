@@ -252,19 +252,9 @@
             ],
             "view/title": [
                 {
-                    "command": "chainGrep.clearAllLocalHighlights",
-                    "when": "view == chainGrepView",
-                    "group": "navigation@1"
-                },
-                {
-                    "command": "_chainGrep.clearAllGlobalHighlights",
-                    "when": "view == chainGrepView",
-                    "group": "navigation@2"
-                },
-                {
                     "command": "chainGrep.closeAllNodes",
                     "when": "view == chainGrepView",
-                    "group": "navigation@3"
+                    "group": "navigation@1"
                 },
                 {
                     "command": "chainGrep.clearBookmarks",

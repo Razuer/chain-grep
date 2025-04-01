@@ -560,23 +560,26 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                 }
             };
 
+            const decoratedLines = new Set<number>();
+
             const directBookmarks = this.getBookmarksForDocument(docUri);
             for (const bookmark of directBookmarks) {
                 if (bookmark.lineNumber !== undefined) {
                     addBookmarkDecoration(bookmark, bookmark.lineNumber);
+                    decoratedLines.add(bookmark.lineNumber);
                 }
             }
 
             if (editor.document.uri.scheme !== "chaingrep") {
                 const sourceBookmarks = this.getBookmarksForSourceURI(docUri);
                 for (const bookmark of sourceBookmarks) {
-                    if (bookmark.docUri === "" && bookmark.lineNumber !== undefined) {
-                        const alreadyDecorated = bookmarkDecorations.some(
-                            (d) => d.range.start.line === bookmark.lineNumber
-                        );
-                        if (!alreadyDecorated) {
-                            addBookmarkDecoration(bookmark, bookmark.lineNumber);
-                        }
+                    if (
+                        bookmark.docUri === "" &&
+                        bookmark.lineNumber !== undefined &&
+                        !decoratedLines.has(bookmark.lineNumber)
+                    ) {
+                        addBookmarkDecoration(bookmark, bookmark.lineNumber);
+                        decoratedLines.add(bookmark.lineNumber);
                     }
                 }
             } else if (typeof this.getChainInfo === "function") {
@@ -588,12 +591,15 @@ export class BookmarkProvider implements vscode.TreeDataProvider<BookmarkNode> {
                     for (const bookmark of sourceBookmarks) {
                         if (bookmark.docUri === "" && bookmark.lineNumber !== undefined) {
                             const bestMatch = this.getCachedLineForBookmark(bookmark, docUri);
-                            if (bestMatch !== undefined) {
-                                const alreadyDecorated = bookmarkDecorations.some(
-                                    (d) => d.range.start.line === bestMatch
+                            if (bestMatch !== undefined && !decoratedLines.has(bestMatch)) {
+                                const existingChainBookmarks = this.getBookmarksAtLine(docUri, bestMatch);
+                                const hasLinkedBookmark = existingChainBookmarks.some(
+                                    (b) => b.linkedBookmarkId === bookmark.id || bookmark.linkedBookmarkId === b.id
                                 );
-                                if (!alreadyDecorated) {
+
+                                if (!hasLinkedBookmark) {
                                     addBookmarkDecoration(bookmark, bestMatch);
+                                    decoratedLines.add(bestMatch);
                                 }
                             }
                         }
